@@ -81,7 +81,7 @@ const memo = new Map();
 
 /**
  * 某天的展示信息：农历日文本、节日/节气、是否节假日、是否调休补班
- * dida 规则：优先显示 节气/节日；月初显示农历月名；初一显示月名
+ * 显示规则：优先显示 节气/节日；月初显示农历月名；初一显示月名
  */
 export function dayInfo(date) {
   // 读取响应式版本号（模板调用时建立依赖，官方数据到达后自动重渲染）
@@ -157,7 +157,7 @@ export function monthGridDates(year, month) {
   const first = new Date(year, month, 1);
   const grids = weekDates(first);
   if (grids.length < 42) {
-    // 滴答显示 5~6 行，固定补足 6 行保持布局稳定
+    // 日历显示 5~6 行，固定补足 6 行保持布局稳定
     while (grids.length < 42) {
       const last = grids[grids.length - 1];
       const x = new Date(last);

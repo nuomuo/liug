@@ -117,14 +117,19 @@ function onHandleDown(side, e) {
   height: 18px;
   margin: 0 3px 2px 2px;
   padding: 0 3px;
-  border-radius: 3px;
-  border: 1px solid transparent;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
   cursor: pointer;
   overflow: visible;
-  transition: opacity 0.2s;
+  -webkit-backdrop-filter: blur(4px) saturate(150%);
+  backdrop-filter: blur(4px) saturate(150%);
+  transition: opacity 0.2s, box-shadow 0.2s var(--ease-spring), transform 0.2s var(--ease-spring);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .c-task:hover {
   filter: brightness(0.96);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 3px 10px rgba(20, 20, 40, 0.16);
 }
 .c-task-inner {
   display: flex;
@@ -192,11 +197,11 @@ function onHandleDown(side, e) {
 }
 .chip-resizer.left {
   left: 0;
-  border-radius: 3px 0 0 3px;
+  border-radius: 8px 0 0 8px;
 }
 .chip-resizer.right {
   right: 0;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 8px 8px 0;
 }
 .c-task:hover .chip-resizer {
   opacity: 1;

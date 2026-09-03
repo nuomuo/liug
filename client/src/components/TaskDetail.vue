@@ -373,18 +373,21 @@ const panelStyle = computed(() => {
 }
 .task-detail {
   position: fixed;
-  background: #fff;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-float);
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
-  animation: pop-in 0.14s ease-out;
+  border-radius: var(--radius-float);
+  animation: pop-in 0.24s var(--ease-spring);
   overflow: hidden;
   user-select: text;
 }
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .td-header-row {
   display: flex;
@@ -396,8 +399,9 @@ const panelStyle = computed(() => {
 .td-close {
   cursor: pointer;
   color: var(--grey-40);
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 3px;
+  transition: all 0.2s var(--ease-spring);
 }
 .td-close:hover {
   background: var(--grey-5);
@@ -411,7 +415,8 @@ const panelStyle = computed(() => {
   cursor: pointer;
   color: var(--grey-40);
   padding: 3px;
-  border-radius: 5px;
+  border-radius: 6px;
+  transition: all 0.2s var(--ease-spring);
 }
 .td-action:hover {
   background: var(--grey-5);
@@ -441,17 +446,18 @@ const panelStyle = computed(() => {
 .td-title-input {
   flex: 1;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   font-size: 17px;
   font-weight: 600;
   line-height: 24px;
   padding: 2px 6px;
   color: var(--front-color);
   min-width: 0;
+  transition: background 0.2s var(--ease-spring);
 }
 .td-title-input:hover,
 .td-title-input:focus {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .td-props {
@@ -466,11 +472,12 @@ const panelStyle = computed(() => {
   align-items: center;
   gap: 9px;
   padding: 6px 6px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background 0.2s var(--ease-spring);
 }
 .td-prop:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .td-prop-icon {
   color: var(--grey-60);
@@ -489,12 +496,22 @@ const panelStyle = computed(() => {
   gap: 8px;
 }
 .inline-input {
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   font-size: 13px;
   color: var(--grey-80);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   width: 124px;
+  padding: 2px 4px;
+  transition: all 0.2s var(--ease-spring);
+}
+.inline-input:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+.inline-input:focus {
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.78);
 }
 .inline-input.small {
   width: 76px;
@@ -518,11 +535,19 @@ const panelStyle = computed(() => {
   top: 34px;
   left: 6px;
   z-index: 30;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow-float);
   padding: 5px 0;
   width: 165px;
+  animation: td-pop-in 0.22s var(--ease-spring);
+}
+@keyframes td-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .menu-row {
   display: flex;
@@ -533,9 +558,10 @@ const panelStyle = computed(() => {
   font-size: 13px;
   color: var(--grey-80);
   cursor: pointer;
+  transition: background 0.15s var(--ease-spring);
 }
 .menu-row:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .menu-row.sel {
   color: var(--primary-color);
@@ -558,10 +584,14 @@ const panelStyle = computed(() => {
   min-width: 150px;
   max-height: 180px;
   overflow-y: auto;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow-float);
   padding: 5px 0;
+  animation: td-pop-in 0.22s var(--ease-spring);
 }
 .tag-suggest-item {
   display: flex;
@@ -572,9 +602,10 @@ const panelStyle = computed(() => {
   font-size: 13px;
   color: var(--grey-80);
   cursor: pointer;
+  transition: background 0.15s var(--ease-spring);
 }
 .tag-suggest-item:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .tag-suggest-item .icon {
   color: var(--grey-60);
@@ -589,9 +620,10 @@ const panelStyle = computed(() => {
   color: var(--primary-color);
   cursor: pointer;
   border-top: 1px solid var(--grey-5);
+  transition: background 0.15s var(--ease-spring);
 }
 .tag-suggest-new:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .tag-suggest-empty {
   padding: 8px 14px;
@@ -602,12 +634,13 @@ const panelStyle = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 8px;
-  border-radius: 10px;
+  padding: 1px 9px;
+  border-radius: 999px;
   background: var(--grey-8);
   font-size: 12px;
   color: var(--grey-80);
   cursor: pointer;
+  transition: background 0.2s var(--ease-spring);
 }
 .tag-chip:hover {
   background: var(--grey-13);
@@ -622,18 +655,23 @@ const panelStyle = computed(() => {
 
 .td-content {
   width: 100%;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   font-size: 13px;
   line-height: 20px;
   min-height: 70px;
   padding: 6px;
   color: var(--grey-80);
   resize: vertical;
+  background: transparent;
+  transition: all 0.2s var(--ease-spring);
 }
 .td-content:hover,
 .td-content:focus {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.55);
+}
+.td-content:focus {
+  border-color: var(--primary-color);
 }
 
 .td-subtasks {
@@ -649,10 +687,11 @@ const panelStyle = computed(() => {
   align-items: center;
   gap: 7px;
   padding: 3px 2px;
-  border-radius: 6px;
+  border-radius: 8px;
+  transition: background 0.2s var(--ease-spring);
 }
 .td-sub-row:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .td-sub-input {
   flex: 1;
@@ -671,6 +710,8 @@ const panelStyle = computed(() => {
   color: var(--grey-40);
   cursor: pointer;
   padding: 2px;
+  border-radius: 4px;
+  transition: color 0.15s var(--ease-spring);
 }
 .td-sub-row:hover .td-sub-del {
   visibility: visible;
@@ -684,10 +725,11 @@ const panelStyle = computed(() => {
   gap: 7px;
   padding: 5px 2px;
   color: var(--grey-60);
-  border-radius: 6px;
+  border-radius: 8px;
+  transition: background 0.2s var(--ease-spring);
 }
 .td-sub-add:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .td-sub-add input {
   border: none;

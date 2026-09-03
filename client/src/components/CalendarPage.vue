@@ -92,7 +92,7 @@ function printCalendar() {
 }
 async function importCsv() {
   moreMenu.value = false;
-  const path = window.prompt('请输入滴答清单备份 CSV 文件路径：', '');
+  const path = window.prompt('请输入备份 CSV 文件路径：', '');
   if (!path) return;
   try {
     const r = await api.importCsv(path.trim());
@@ -212,7 +212,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
                 <Icon :name="store.calendarSettings.showCompleted ? 'calendar-checkbox' : 'calendar-complete'" :size="14" />
                 {{ store.calendarSettings.showCompleted ? '隐藏已完成任务' : '显示已完成任务' }}
               </li>
-              <li @click="importCsv"><Icon name="add-small" :size="14" />导入滴答清单 CSV 备份…</li>
+              <li @click="importCsv"><Icon name="add-small" :size="14" />导入 CSV 备份…</li>
               <li @click="printCalendar"><Icon name="more" :size="14" />打印日历</li>
             </div>
           </div>
@@ -232,50 +232,57 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   flex: 1;
   display: flex;
   overflow: hidden;
-  padding: 6px 6px 6px 0;
+  padding: 10px 10px 10px 10px;
+  gap: 10px;
   min-width: 0;
 }
-/* 左面板隐藏时：补上左侧内边距，右侧圆角补全 */
+/* 左面板隐藏时：内容面板独自占满 */
 .calendar-page.no-left {
-  padding-left: 6px;
-}
-.calendar-page.no-left .tk-calendar-content {
-  border-radius: 10px;
+  padding-left: 10px;
 }
 
-/* 左侧面板 */
+/* 左侧面板（悬浮玻璃卡） */
 .tk-calendar-left-view {
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   flex: none;
-  background: var(--main-background-color);
-  border-radius: 10px 0 0 10px;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 .detail-dragger {
   position: absolute;
-  width: 5px;
+  width: 7px;
   height: 100%;
-  right: 0;
+  right: -4px;
   top: 0;
   z-index: 2;
   cursor: col-resize;
 }
 .detail-dragger:hover,
 .detail-dragger.active {
-  background: var(--grey-8);
+  background: color-mix(in srgb, var(--primary-color) 25%, transparent);
+  border-radius: 4px;
 }
 
-/* 右侧内容 */
+/* 右侧内容（悬浮玻璃卡） */
 .tk-calendar-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--main-background-color);
-  border-radius: 0 10px 10px 0;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   min-width: 0;
 }
 
@@ -285,17 +292,17 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 50px;
+  height: 56px;
   flex: none;
-  padding: 10px 12px;
+  padding: 12px 16px;
 }
 .c-range-wrap {
   display: flex;
   align-items: center;
-  height: 30px;
+  height: 32px;
 }
 .nav-icon-btn {
-  margin-right: 6px;
+  margin-right: 8px;
   color: var(--grey-60);
   cursor: pointer;
 }
@@ -305,18 +312,19 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   margin-right: 4px;
 }
 .c-range-title {
-  font-size: 20px;
-  line-height: 30px;
+  font-size: 21px;
+  line-height: 32px;
   display: inline-flex;
   align-items: center;
   position: relative;
-  padding: 0 4px;
-  border-radius: 6px;
+  padding: 0 8px;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .c-range-title:hover {
-  background: var(--grey-5);
+  background: rgba(29, 29, 31, 0.05);
 }
 .c-range {
   color: var(--front-color);
@@ -331,14 +339,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 }
 
 .month-picker {
-  width: 232px;
-  padding: 10px 14px;
+  width: 236px;
+  padding: 12px 14px;
 }
 .picker-year-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .picker-year {
   font-size: 14px;
@@ -351,9 +359,9 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 }
 .picker-month {
   display: inline-block;
-  width: 34px;
-  height: 34px;
-  line-height: 34px;
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
   text-align: center;
   border-radius: 50%;
   font-size: 13px;
@@ -361,7 +369,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   margin: 0 auto;
 }
 .picker-month:hover {
-  background: var(--grey-5);
+  background: rgba(29, 29, 31, 0.06);
 }
 .picker-month.current {
   color: var(--primary-color);
@@ -376,42 +384,48 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   align-items: center;
 }
 .add-btn {
-  width: 30px;
-  height: 30px;
-  margin-right: 16px;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  margin-right: 14px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--grey-80);
+  transition: all 0.15s var(--ease-spring);
 }
 .add-btn:hover {
   color: var(--primary-color);
   border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .view-switch {
   position: relative;
   display: flex;
   align-items: center;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
-  margin-right: 16px;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
+  margin-right: 14px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   color: var(--grey-80);
+  transition: all 0.15s var(--ease-spring);
 }
 .view-switch:hover {
   color: var(--primary-color);
   border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.75);
 }
 .view-switch p {
   font-size: 14px;
   margin-right: 2px;
-  line-height: 28px;
+  line-height: 30px;
 }
 .view-menu {
   min-width: 90px;
@@ -424,14 +438,15 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .btn-group {
   display: flex;
   align-items: center;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
-  margin-right: 16px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.5);
+  margin-right: 14px;
   overflow: hidden;
-  height: 30px;
+  height: 32px;
 }
 .group-btn {
-  width: 34px;
+  width: 36px;
   height: 100%;
   display: flex;
   align-items: center;
@@ -440,12 +455,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 }
 .group-btn:hover {
   color: var(--primary-color);
+  background: rgba(29, 29, 31, 0.04);
 }
 .group-btn.today {
   width: auto;
-  padding: 0 12px;
-  border-left: 1px solid var(--grey-20);
-  border-right: 1px solid var(--grey-20);
+  padding: 0 14px;
+  border-left: 1px solid rgba(29, 29, 31, 0.08);
+  border-right: 1px solid rgba(29, 29, 31, 0.08);
   font-size: 14px;
 }
 

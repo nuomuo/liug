@@ -467,10 +467,18 @@ async function removeProject() {
   position: fixed;
   z-index: 1201;
   width: 244px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: var(--default-shadow);
-  padding: 12px;
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
+  padding: 14px;
+  animation: proj-edit-in 0.22s var(--ease-spring);
+}
+@keyframes proj-edit-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .proj-edit-center {
   left: 50%;
@@ -484,13 +492,14 @@ async function removeProject() {
 }
 .proj-edit-name {
   width: 100%;
-  height: 32px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
+  height: 34px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
   padding: 0 10px;
   font-size: 13px;
   outline: none;
   color: var(--front-color);
+  background: rgba(255, 255, 255, 0.6);
 }
 .proj-edit-name:focus {
   border-color: var(--primary-color);
@@ -558,12 +567,14 @@ async function removeProject() {
   flex: 1;
 }
 .proj-edit-actions button {
-  height: 28px;
-  padding: 0 14px;
-  border-radius: 6px;
+  height: 30px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
+  transition: all 0.15s var(--ease-spring);
 }
 .proj-del {
   border-color: transparent;
@@ -572,12 +583,12 @@ async function removeProject() {
   padding: 0 8px !important;
 }
 .proj-del:hover {
-  background: #fdecec;
+  background: rgba(217, 84, 77, 0.1);
 }
 .proj-cancel {
-  background: none;
+  background: rgba(255, 255, 255, 0.6);
   color: var(--grey-60);
-  border-color: var(--grey-20) !important;
+  border-color: rgba(29, 29, 31, 0.12) !important;
 }
 .proj-cancel:hover {
   color: var(--front-color);

@@ -293,7 +293,7 @@ async function onDrop(e, d, hour) {
   border-right: none;
 }
 .c-weekend-col {
-  background: var(--grey-1);
+  background: rgba(29, 29, 31, 0.03);
 }
 .w-day-title {
   display: flex;
@@ -397,15 +397,22 @@ async function onDrop(e, d, hour) {
   left: 3px;
   right: 4px;
   z-index: 2;
-  border-radius: 4px;
+  border-radius: 10px;
   padding: 2px 6px;
   font-size: 12px;
   overflow: hidden;
   cursor: pointer;
-  border-left: 3px solid rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  -webkit-backdrop-filter: blur(4px) saturate(150%);
+  backdrop-filter: blur(4px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 8px rgba(20, 20, 40, 0.1);
+  transition: box-shadow 0.2s var(--ease-spring), transform 0.2s var(--ease-spring);
 }
 .w-event:hover {
   filter: brightness(1.05);
+  transform: translateY(-1px);
+  z-index: 3;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 14px rgba(20, 20, 40, 0.16);
 }
 .w-event-time {
   font-size: 10px;
@@ -423,6 +430,8 @@ async function onDrop(e, d, hour) {
   right: 0;
   height: 2px;
   background: #e13e39;
+  border-radius: 1px;
+  box-shadow: 0 0 8px rgba(225, 62, 57, 0.45);
   z-index: 3;
 }
 .w-now-dot {
@@ -433,5 +442,6 @@ async function onDrop(e, d, hour) {
   height: 8px;
   border-radius: 50%;
   background: #e13e39;
+  box-shadow: 0 0 6px rgba(225, 62, 57, 0.55);
 }
 </style>

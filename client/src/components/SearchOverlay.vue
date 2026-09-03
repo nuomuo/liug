@@ -74,7 +74,9 @@ function open(t, e) {
   position: fixed;
   inset: 0;
   z-index: 1400;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(15, 18, 30, 0.18);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   display: flex;
   justify-content: center;
   padding-top: 12vh;
@@ -83,13 +85,21 @@ function open(t, e) {
   width: 620px;
   max-width: 92vw;
   max-height: 62vh;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   align-self: flex-start;
+  animation: search-in 0.22s var(--ease-spring);
+}
+@keyframes search-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .search-bar {
   display: flex;
@@ -101,9 +111,21 @@ function open(t, e) {
 }
 .search-bar input {
   flex: 1;
-  border: none;
+  height: 38px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 0 12px;
   font-size: 16px;
   color: var(--front-color);
+  transition: border-color 0.15s var(--ease-spring), box-shadow 0.15s var(--ease-spring);
+}
+.search-bar input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 15%, transparent);
+}
+.search-bar input::placeholder {
+  color: var(--grey-40);
 }
 .search-count {
   font-size: 12px;
@@ -112,18 +134,19 @@ function open(t, e) {
 }
 .search-results {
   overflow-y: auto;
-  padding: 6px;
+  padding: 8px;
   user-select: none;
 }
 .result-item {
   display: flex;
   gap: 10px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   cursor: pointer;
+  transition: background 0.15s var(--ease-spring);
 }
 .result-item:hover {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.5);
 }
 .r-check {
   margin-top: 2px;

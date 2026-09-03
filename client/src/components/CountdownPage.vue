@@ -6,9 +6,9 @@ import { computeCountdown } from '../lib/countdown.js';
 import Icon from './Icon.vue';
 
 const TYPE_META = {
-  anniversary: { label: '纪念日', img: '/cd_anniversary.jpg' },
-  countdown: { label: '倒数日', img: '/cd_preset_countdown.jpg' },
-  birthday: { label: '生日', img: '/cd_birthday.jpg' },
+  anniversary: { label: '纪念日', img: null, gradient: 'linear-gradient(135deg, #9c4f6d 0%, #d389a9 60%, #7d55c4 130%)' },
+  countdown: { label: '倒数日', img: null, gradient: 'linear-gradient(135deg, #1c2a5c 0%, #3c4a9e 60%, #6e63d8 130%)' },
+  birthday: { label: '生日', img: null, gradient: 'linear-gradient(135deg, #d6556e 0%, #f28d6b 60%, #ffc85c 130%)' },
   festival: { label: '节日', img: null, gradient: 'linear-gradient(135deg, #c0392b 0%, #e67e22 60%, #f1c40f 130%)' },
 };
 const FILTERS = [
@@ -148,7 +148,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
     <div class="cd-scroll">
       <div class="cd-grid">
         <div v-for="cd in list" :key="cd.id" class="cd-card group">
-          <div class="cd-bg" :style="TYPE_META[cd.type].gradient ? { background: TYPE_META[cd.type].gradient } : { backgroundImage: `url(${TYPE_META[cd.type].img})`, backgroundSize: 'cover', backgroundPosition: 'center top' }"></div>
+          <div class="cd-bg" :style="{ background: TYPE_META[cd.type].gradient }"></div>
           <div class="cd-overlay"></div>
 
           <div class="cd-content">
@@ -247,9 +247,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 6px 6px 6px 0;
-  background: var(--main-background-color);
-  border-radius: 10px;
+  padding: 10px;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   min-width: 0;
 }
 .tl-bar {
@@ -275,6 +279,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   border-radius: 6px;
   cursor: pointer;
   color: var(--grey-60);
+  transition: background 0.15s var(--ease-spring), color 0.15s var(--ease-spring);
 }
 .tl-icon:hover {
   background: var(--grey-5);
@@ -289,20 +294,25 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   flex: none;
 }
 .filter-pill {
-  padding: 5px 12px;
+  padding: 5px 14px;
   line-height: 20px;
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.42);
   cursor: pointer;
   font-size: 13px;
   color: var(--grey-60);
-  transition: all 0.12s;
+  transition: all 0.15s var(--ease-spring);
 }
 .filter-pill:hover {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--front-color);
 }
 .filter-pill.active {
   background: var(--primary-color);
+  border-color: var(--primary-color);
   color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color) 35%, transparent);
 }
 
 .cd-scroll {
@@ -318,19 +328,31 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .cd-card {
   position: relative;
   height: 173px;
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   overflow: hidden;
-  box-shadow: 0 0 6.06px rgba(25, 25, 25, 0.03);
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  box-shadow: var(--glass-shadow);
   cursor: default;
+  transition: transform 0.22s var(--ease-spring), box-shadow 0.22s var(--ease-spring);
+}
+.cd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glass-shadow-float);
 }
 .cd-bg {
   position: absolute;
   inset: 0;
 }
+/* 顶部高光（光打在材质上缘）+ 自上而下轻柔暗化，保证白字可读 */
 .cd-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, rgba(16, 16, 38, 0.10) 0%, rgba(16, 16, 38, 0.26) 100%);
 }
 .cd-content {
   position: relative;
@@ -354,6 +376,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.38);
 }
 .cd-pinned-mark {
   display: inline-flex;
@@ -372,24 +395,27 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   line-height: 58px;
   font-weight: 600;
   color: #fff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 .cd-unit {
   font-size: 18px;
   line-height: 38px;
   margin-left: 4px;
   color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
 }
 .cd-desc {
   height: 17px;
   font-size: 11px;
   line-height: 17px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.88);
   padding: 0 24px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   margin-bottom: 8px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .cd-actions {
@@ -411,12 +437,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: 7px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: background 0.15s var(--ease-spring);
 }
 .cd-act:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
 }
 .cd-menu {
   min-width: 110px;
@@ -426,13 +454,16 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--grey-20);
-  background: var(--card-bg);
+  border: 1px dashed rgba(29, 29, 31, 0.18);
+  background: rgba(255, 255, 255, 0.35);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  backdrop-filter: blur(12px) saturate(160%);
   cursor: pointer;
   box-shadow: none;
 }
 .cd-add-card:hover {
   border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.55);
 }
 .cd-add-inner {
   display: flex;
@@ -446,12 +477,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   color: var(--primary-color);
 }
 
-/* 弹窗 */
+/* 弹窗（重玻璃 + 材质浮现） */
 .cd-modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1500;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(15, 18, 30, 0.18);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -459,15 +492,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .cd-modal {
   width: 380px;
   max-width: 92vw;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
   padding: 18px 20px;
-  animation: pop-in 0.15s ease-out;
+  animation: cd-modal-in 0.25s var(--ease-spring);
 }
-@keyframes pop-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: none; }
+@keyframes cd-modal-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .cd-modal-title {
   font-size: 16px;
@@ -477,11 +513,17 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .cd-input {
   width: 100%;
   height: 34px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
   padding: 0 10px;
   font-size: 14px;
   color: var(--front-color);
+  background: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.15s var(--ease-spring), background 0.15s var(--ease-spring);
+}
+.cd-input:focus {
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.85);
 }
 .cd-input.title {
   font-size: 15px;
@@ -506,16 +548,19 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .type-pill {
   padding: 3px 12px;
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
   font-size: 12px;
   cursor: pointer;
-  background: var(--grey-5);
+  background: rgba(255, 255, 255, 0.5);
   color: var(--grey-80);
+  transition: all 0.15s var(--ease-spring);
 }
 .type-pill:hover {
-  background: var(--grey-10);
+  background: rgba(255, 255, 255, 0.75);
 }
 .type-pill.active {
   background: var(--primary-color);
+  border-color: var(--primary-color);
   color: #fff;
 }
 .cd-input.date {
@@ -556,10 +601,12 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .cd-cancel {
   height: 32px;
   padding: 0 18px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.6);
   font-size: 13px;
   color: var(--grey-80);
+  transition: all 0.15s var(--ease-spring);
 }
 .cd-cancel:hover {
   border-color: var(--primary-color);
@@ -568,10 +615,11 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 .cd-save {
   height: 32px;
   padding: 0 22px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--primary-color);
   color: #fff;
   font-size: 13px;
+  transition: all 0.15s var(--ease-spring);
 }
 .cd-save:hover {
   background: var(--primary-hover-color);

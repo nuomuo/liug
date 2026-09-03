@@ -217,10 +217,13 @@ function fmtTime(iso) {
   min-width: 0;
   overflow: auto;
   padding: 24px 28px;
-  background: rgba(255, 255, 255, 0.96);
-  margin: 14px;
-  border-radius: 12px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
+  margin: 10px;
 }
 .admin-header {
   display: flex;
@@ -243,9 +246,10 @@ function fmtTime(iso) {
   margin-left: 4px;
 }
 .admin-table-wrap {
-  border: 1px solid var(--grey-5);
-  border-radius: 10px;
-  overflow: auto;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 14px;
+  overflow: hidden auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 .admin-table {
   width: 100%;
@@ -259,19 +263,28 @@ function fmtTime(iso) {
   color: var(--grey-40);
   padding: 10px 14px;
   border-bottom: 1px solid var(--grey-5);
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
 }
 .admin-table td {
   padding: 11px 14px;
-  border-bottom: 1px solid var(--grey-5);
+  border-bottom: 1px solid var(--grey-3);
   vertical-align: middle;
 }
 .admin-table tr:last-child td {
   border-bottom: none;
 }
+.admin-table tbody tr {
+  transition: background 0.2s var(--ease-spring);
+}
+.admin-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.5);
+}
 tr.me td {
   background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+}
+.admin-table tbody tr.me:hover td {
+  background: color-mix(in srgb, var(--primary-color) 7%, rgba(255, 255, 255, 0.5));
 }
 tr.off td {
   opacity: 0.55;
@@ -283,19 +296,20 @@ tr.off td {
   font-size: 11px;
   font-weight: 400;
   color: var(--primary-color);
-  border: 1px solid var(--primary-color);
-  border-radius: 4px;
-  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
   margin-left: 8px;
 }
 .role-tag {
   font-size: 12px;
-  border-radius: 4px;
-  padding: 2px 8px;
+  border-radius: 999px;
+  padding: 2px 9px;
 }
 .role-tag.admin {
   color: #b8860b;
-  background: #fdf6e3;
+  background: rgba(184, 134, 11, 0.12);
 }
 .role-tag.user {
   color: var(--grey-60);
@@ -331,22 +345,25 @@ tr.off td {
   align-items: center;
   gap: 5px;
   height: 30px;
-  padding: 0 13px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
-  background: #fff;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   color: var(--grey-80);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s var(--ease-spring);
 }
 .btn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.7);
 }
 .btn.primary {
   background: var(--primary-color);
-  border-color: var(--primary-color);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 8px color-mix(in srgb, var(--primary-color) 35%, transparent);
   color: #fff;
 }
 .btn.primary:hover {
@@ -355,12 +372,13 @@ tr.off td {
 }
 .btn.small {
   height: 26px;
-  padding: 0 10px;
+  padding: 0 11px;
   margin-left: 6px;
 }
 .btn.danger:hover {
   border-color: #d9544d;
   color: #d9544d;
+  background: rgba(217, 84, 77, 0.08);
 }
 .btn:disabled {
   opacity: 0.5;
@@ -376,7 +394,9 @@ tr.off td {
   position: fixed;
   inset: 0;
   z-index: 1600;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(15, 18, 30, 0.18);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,15 +404,18 @@ tr.off td {
 .modal {
   width: 380px;
   max-width: 92vw;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
   padding: 22px 24px;
-  animation: pop-in 0.16s ease-out;
+  animation: modal-materialize 0.24s var(--ease-spring);
 }
-@keyframes pop-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+@keyframes modal-materialize {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .modal-title {
   font-size: 15px;
@@ -413,17 +436,19 @@ tr.off td {
 .field input,
 .field select {
   height: 36px;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
   padding: 0 11px;
   font-size: 13px;
   outline: none;
   color: var(--front-color);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.2s var(--ease-spring), background 0.2s var(--ease-spring);
 }
 .field input:focus,
 .field select:focus {
   border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.8);
 }
 .modal-actions {
   display: flex;

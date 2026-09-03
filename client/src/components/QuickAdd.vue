@@ -269,13 +269,21 @@ function toggleTag(tag) {
   display: inline-flex;
   flex-direction: column;
   align-self: flex-start;
-  box-shadow: var(--default-shadow);
-  border-radius: 10px;
-  background: #fff;
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
   width: 560px;
   max-width: 92vw;
   text-align: left;
   user-select: text;
+  animation: qa-pop-in 0.28s var(--ease-spring);
+}
+@keyframes qa-pop-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .tl-quick {
   position: relative;
@@ -332,10 +340,11 @@ function toggleTag(tag) {
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   color: var(--grey-60);
   flex: none;
+  transition: all 0.2s var(--ease-spring);
 }
 .preset-item:hover,
 .preset-item.open {
@@ -355,12 +364,20 @@ function toggleTag(tag) {
   top: 32px;
   left: 0;
   z-index: 20;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow-float);
   padding: 10px;
   width: 250px;
   text-align: left;
+  animation: qa-menu-in 0.22s var(--ease-spring);
+}
+@keyframes qa-menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .preset-popover.wide {
   width: 150px;
@@ -374,15 +391,17 @@ function toggleTag(tag) {
 .quick-row button {
   flex: 1;
   height: 28px;
-  border: 1px solid var(--grey-20);
-  border-radius: 6px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: 999px;
   font-size: 12px;
   color: var(--grey-80);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s var(--ease-spring);
 }
 .quick-row button:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.78);
 }
 .labels-row {
   gap: 6px;
@@ -401,11 +420,20 @@ function toggleTag(tag) {
   flex: 1;
   min-width: 0;
   height: 28px;
-  border: 1px solid var(--grey-20);
-  border-radius: 6px;
-  padding: 0 6px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: var(--radius-control);
+  padding: 0 8px;
   font-size: 12px;
   color: var(--front-color);
+  background: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s var(--ease-spring);
+}
+.form-row input:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+.form-row input:focus {
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.78);
 }
 .form-row input:disabled {
   background: var(--grey-3);
@@ -429,9 +457,10 @@ function toggleTag(tag) {
   font-size: 13px;
   color: var(--grey-80);
   cursor: pointer;
+  transition: background 0.15s var(--ease-spring);
 }
 .menu-row:hover {
-  background: var(--grey-4);
+  background: var(--grey-5);
 }
 .menu-row.sel {
   color: var(--primary-color);
@@ -451,12 +480,13 @@ function toggleTag(tag) {
   max-width: 240px;
 }
 .tag-chip {
-  padding: 2px 10px;
-  border-radius: 12px;
+  padding: 2px 11px;
+  border-radius: 999px;
   background: var(--grey-5);
   font-size: 12px;
   color: var(--grey-80);
   cursor: pointer;
+  transition: all 0.2s var(--ease-spring);
 }
 .tag-chip:hover {
   background: var(--grey-10);
@@ -474,29 +504,40 @@ function toggleTag(tag) {
   width: calc(100% - 20px);
   margin: 0 10px 10px;
   height: 28px;
-  border: 1px solid var(--grey-20);
-  border-radius: 6px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  border-radius: var(--radius-control);
   padding: 0 8px;
   font-size: 12px;
+  color: var(--front-color);
+  background: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s var(--ease-spring);
+}
+.tag-input:focus {
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .add-btn-submit {
   flex: none;
   margin-left: 8px;
   height: 30px;
-  padding: 0 18px;
-  border-radius: 6px;
-  background: var(--primary-color);
+  padding: 0 20px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--primary-hover-color), var(--primary-color));
   color: #fff;
   font-size: 14px;
-  transition: background 0.15s;
+  font-weight: 500;
+  box-shadow: 0 4px 14px rgba(74, 108, 247, 0.35);
+  transition: all 0.2s var(--ease-spring);
 }
-.add-btn-submit:hover {
-  background: var(--primary-hover-color);
+.add-btn-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px rgba(74, 108, 247, 0.45);
 }
 .add-btn-submit:disabled {
   background: var(--grey-10);
   color: var(--grey-30);
   cursor: not-allowed;
+  box-shadow: none;
 }
 </style>

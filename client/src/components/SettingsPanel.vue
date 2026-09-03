@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { store, applyTheme, showToast, logout } from '../store.js';
 import { api } from '../api.js';
 import Icon from './Icon.vue';
-import avatarUrl from '../assets/avatar-new.png';
 
 const presets = [
   { name: '黑海（默认）', color: '#484553' },
@@ -82,7 +81,7 @@ async function doLogout() {
     <div class="settings-panel" @mousedown.stop>
       <div class="sp-header">
         <div class="sp-user">
-          <img :src="avatarUrl" class="sp-avatar" alt="" />
+          <span class="sp-avatar">{{ (store.user?.username || 'U').slice(0,1).toUpperCase() }}</span>
           <div class="sp-user-info">
             <div class="sp-name">{{ accountName }}</div>
             <div class="sp-sub">{{ accountRole }} · 数据独立存储于个人 SQLite 数据库</div>
@@ -158,7 +157,9 @@ async function doLogout() {
   position: fixed;
   inset: 0;
   z-index: 1500;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(15, 18, 30, 0.18);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -166,15 +167,18 @@ async function doLogout() {
 .settings-panel {
   width: 460px;
   max-width: 92vw;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow-float);
   overflow: hidden;
-  animation: pop-in 0.16s ease-out;
+  animation: pop-in 0.22s var(--ease-spring);
 }
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .sp-header {
   display: flex;
@@ -189,9 +193,19 @@ async function doLogout() {
   gap: 12px;
 }
 .sp-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover-color));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 2px 8px rgba(20, 20, 40, 0.18);
 }
 .sp-name {
   font-size: 16px;
@@ -203,13 +217,18 @@ async function doLogout() {
   margin-top: 3px;
 }
 .sp-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   color: var(--grey-40);
-  padding: 4px;
-  border-radius: 6px;
+  border-radius: 50%;
+  transition: background 0.15s var(--ease-spring), color 0.15s var(--ease-spring);
 }
 .sp-close:hover {
-  background: var(--grey-5);
+  background: rgba(29, 29, 31, 0.06);
   color: var(--front-color);
 }
 .sp-body {
@@ -240,13 +259,15 @@ async function doLogout() {
   gap: 6px;
   cursor: pointer;
   padding: 8px 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
+  transition: background 0.15s var(--ease-spring), box-shadow 0.15s var(--ease-spring);
 }
 .swatch:hover {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.5);
 }
 .swatch.active {
-  background: var(--grey-5);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
 }
 .swatch-color {
   width: 36px;
@@ -282,7 +303,7 @@ async function doLogout() {
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   background: none;
   padding: 0;
@@ -296,14 +317,18 @@ async function doLogout() {
 .reset-btn {
   height: 28px;
   padding: 0 14px;
-  border: 1px solid var(--grey-20);
-  border-radius: 6px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.55);
   font-size: 12px;
   color: var(--grey-80);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-spring);
 }
 .reset-btn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.75);
 }
 .account-actions {
   display: flex;
@@ -313,21 +338,23 @@ async function doLogout() {
 .account-btn {
   height: 32px;
   padding: 0 16px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
-  background: #fff;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.55);
   font-size: 13px;
   color: var(--grey-80);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s var(--ease-spring);
 }
 .account-btn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.75);
 }
 .account-btn.logout:hover {
-  border-color: #d9544d;
+  border-color: rgba(217, 84, 77, 0.45);
   color: #d9544d;
+  background: rgba(217, 84, 77, 0.08);
 }
 .pwd-form {
   margin-top: 14px;
@@ -346,21 +373,24 @@ async function doLogout() {
 }
 .pwd-field input {
   height: 34px;
-  border: 1px solid var(--grey-20);
-  border-radius: 7px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: var(--radius-control);
   padding: 0 11px;
   font-size: 13px;
   outline: none;
   color: var(--front-color);
+  background: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.15s var(--ease-spring), box-shadow 0.15s var(--ease-spring);
 }
 .pwd-field input:focus {
   border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 .pwd-error {
   font-size: 12px;
   color: #d9544d;
-  background: #fdecec;
-  border-radius: 6px;
+  background: rgba(217, 84, 77, 0.1);
+  border-radius: var(--radius-control);
   padding: 7px 10px;
   margin-bottom: 11px;
 }
@@ -368,14 +398,17 @@ async function doLogout() {
   height: 34px;
   width: 100%;
   border: none;
-  border-radius: 7px;
-  background: var(--primary-color);
+  border-radius: var(--radius-control);
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover-color));
   color: #fff;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-color) 30%, transparent);
+  transition: filter 0.15s var(--ease-spring);
 }
 .pwd-submit:hover {
-  background: var(--primary-hover-color);
+  filter: brightness(1.06);
 }
 .pwd-submit:disabled {
   opacity: 0.6;

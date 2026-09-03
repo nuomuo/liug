@@ -81,12 +81,10 @@ function onKey(e) {
 <style scoped>
 .app-shell {
   height: 100%;
+  width: 100%;
   display: flex;
   overflow: hidden;
-  /* 主题色着色层叠在原背景照片上，选主题色时四周同步变色 */
-  background-image: linear-gradient(var(--screen-tint), var(--screen-tint)), url('/bg.png');
-  background-size: cover;
-  background-position: 0 100%;
+  /* 壁纸 + 主题色着色层已挂在 body（global.css），保证铺满整个视口 */
 }
 .main-view {
   flex: 1;

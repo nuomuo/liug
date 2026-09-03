@@ -1,7 +1,7 @@
 <script setup>
+import { computed } from 'vue';
 import { store, showToast, logout } from '../store.js';
 import Icon from './Icon.vue';
-import avatarUrl from '../assets/avatar-new.png';
 
 const railItems = [
   { key: 'list', icon: 'list-sidebar', label: '任务' },
@@ -11,6 +11,9 @@ const railItems = [
   { key: 'habit', icon: 'habit-sidebar', label: '习惯' },
   { key: 'countdown', icon: 'countdown-sidebar', label: '倒数日' },
 ];
+
+// 首字母头像（Contacts 风格：主题色渐变 + 首字符）
+const initial = computed(() => (store.user?.username || '?').slice(0, 1).toUpperCase());
 
 function go(item) {
   store.view = item.key;
@@ -30,7 +33,7 @@ async function doLogout() {
 <template>
   <div class="left-rail">
     <div class="t-user" :title="store.user ? `${store.user.username}（设置）` : '设置'" @click="store.settingsOpen = true">
-      <img class="avatar" :src="avatarUrl" alt="" />
+      <span class="avatar">{{ initial }}</span>
     </div>
 
     <div class="rail-mid">
@@ -42,10 +45,10 @@ async function doLogout() {
         :title="item.label"
         @click="go(item)"
       >
-        <Icon :name="item.icon" :size="28" />
+        <Icon :name="item.icon" :size="24" />
       </div>
       <div class="rail-item" title="搜索 (Ctrl+K)" @click="openSearch">
-        <Icon name="search-sidebar" :size="28" />
+        <Icon name="search-sidebar" :size="24" />
       </div>
       <div
         v-if="store.user?.role === 'admin'"
@@ -54,22 +57,22 @@ async function doLogout() {
         title="用户管理"
         @click="goAdmin"
       >
-        <Icon name="user-icon" :size="28" />
+        <Icon name="user-icon" :size="24" />
       </div>
     </div>
 
     <div class="rail-bottom">
       <div class="rail-item" title="同步" @click="showToast('数据已同步（本地 SQLite）')">
-        <Icon name="sidebar-sync" :size="28" />
+        <Icon name="sidebar-sync" :size="24" />
       </div>
       <div class="rail-item" title="通知" @click="showToast('暂无新通知')">
-        <Icon name="notification-sidebar" :size="28" />
+        <Icon name="notification-sidebar" :size="24" />
       </div>
       <div class="rail-item" title="帮助" @click="showToast('帮助中心：查看 README.md')">
-        <Icon name="question-sidebar" :size="28" />
+        <Icon name="question-sidebar" :size="24" />
       </div>
       <div class="rail-item" title="退出登录" @click="doLogout">
-        <Icon name="setting-sidebar" :size="28" />
+        <Icon name="setting-sidebar" :size="24" />
       </div>
     </div>
   </div>
@@ -77,28 +80,46 @@ async function doLogout() {
 
 <style scoped>
 .left-rail {
-  width: 50px;
+  width: 56px;
   flex: none;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 0 11px;
-  /* 深色底由主题色加深派生，随设置面板选色联动 */
-  background: color-mix(in srgb, var(--left-sidebar-bg) 82%, transparent);
+  padding: 16px 0 14px;
+  /* 深色玻璃：随主题色联动的暗色 + 模糊透出壁纸 */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--left-sidebar-bg) 62%, transparent),
+    color-mix(in srgb, var(--left-sidebar-bg) 48%, transparent)
+  );
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(28px) saturate(160%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 5;
 }
 .t-user {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 11px;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 14px;
   cursor: pointer;
 }
 .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover-color));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.25);
+  letter-spacing: 0;
+}
+.t-user:hover .avatar {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45), 0 2px 12px rgba(0, 0, 0, 0.3);
 }
 .rail-mid {
   flex: 1;
@@ -109,33 +130,28 @@ async function doLogout() {
 }
 .rail-item {
   position: relative;
-  width: 40px;
-  height: 40px;
-  margin: 5px 0;
+  width: 42px;
+  height: 42px;
+  margin: 3px 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 13px;
   cursor: pointer;
-  color: #fff;
-  opacity: 0.4;
-  transition: opacity 0.15s, background 0.15s;
+  color: rgba(255, 255, 255, 0.55);
+  transition: background 0.18s var(--ease-spring), color 0.18s var(--ease-spring), transform 0.1s ease-out;
 }
 .rail-item:hover {
-  opacity: 0.6;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+}
+.rail-item:active {
+  transform: scale(0.94);
 }
 .rail-item.active {
-  opacity: 1;
-}
-.rail-item.active::before {
-  content: '';
-  position: absolute;
-  left: -6px;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 2px;
-  background: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 .rail-bottom {
   flex: none;

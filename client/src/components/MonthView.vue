@@ -77,7 +77,7 @@ function rowEvents(row) {
   return lanes;
 }
 
-// 每格可显示的 chip 数量（按行高动态计算，与滴答“还有 N 个”行为一致）
+// 每格可显示的 chip 数量（按行高动态计算，超出的折叠为「还有 N 个」）
 const rowsEl = ref(null);
 const rowHeight = ref(120);
 const cellWidth = ref(150);
@@ -375,7 +375,7 @@ async function onRowDrop(e, row) {
   align-items: center;
   justify-content: center;
   color: var(--green);
-  background: var(--main-background-color);
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
 }
 .c-solar.today .c-hw-info {
@@ -425,12 +425,20 @@ async function onRowDrop(e, row) {
   transform: translateX(-50%);
   width: 380px;
   max-height: 60%;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: var(--default-shadow);
-  padding: 12px;
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
+  padding: 14px;
   display: flex;
   flex-direction: column;
+  animation: day-pop-in 0.22s var(--ease-spring);
+}
+@keyframes day-pop-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: translateX(-50%); filter: blur(0); }
 }
 .day-popover-title {
   font-size: 15px;

@@ -131,19 +131,25 @@ onBeforeUnmount(stop);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 6px 6px 0;
-  /* 页面背景随主题色联动 */
-  background: var(--primary-color);
-  transition: background 0.3s;
-  /* 卡片底色 = 白色混入少量主题色，跟随主题变化 */
-  --fp-card: color-mix(in srgb, var(--primary-color) 8%, #fff);
+  padding: 10px;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
+  /* 卡片底色 = 白色玻璃混入少量主题色，跟随主题变化 */
+  --fp-card: color-mix(in srgb, var(--primary-color) 6%, rgba(255, 255, 255, 0.55));
 }
 .fp-panel {
   width: 480px;
   max-width: 94vw;
   background: var(--fp-card);
-  border-radius: 14px;
-  box-shadow: var(--default-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-float);
+  box-shadow: var(--glass-shadow-float);
   padding: 28px 32px 24px;
   display: flex;
   flex-direction: column;
@@ -152,22 +158,33 @@ onBeforeUnmount(stop);
 }
 .fp-ring-inner {
   fill: var(--fp-card);
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1;
 }
+/* 模式切换：胶囊分段控件 */
 .fp-modes {
   display: flex;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
   margin-bottom: 20px;
 }
 .fp-modes button {
   padding: 6px 22px;
   font-size: 14px;
-  color: var(--grey-80);
+  border-radius: 999px;
+  color: var(--grey-60);
+  transition: all 0.18s var(--ease-spring);
+}
+.fp-modes button:hover {
+  color: var(--front-color);
 }
 .fp-modes button.active {
   background: var(--primary-color);
   color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color) 35%, transparent);
 }
 .fp-clock {
   position: relative;
@@ -178,6 +195,7 @@ onBeforeUnmount(stop);
   width: 100%;
   height: 100%;
   display: block;
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--primary-color) 18%, transparent));
 }
 .fp-time {
   position: absolute;
@@ -187,6 +205,7 @@ onBeforeUnmount(stop);
   justify-content: center;
   font-size: 44px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 .fp-controls {
@@ -196,27 +215,34 @@ onBeforeUnmount(stop);
   margin: 18px 0 6px;
 }
 .fp-main-btn {
-  height: 40px;
-  padding: 0 34px;
-  border-radius: 8px;
+  height: 42px;
+  padding: 0 36px;
+  border-radius: 999px;
   background: var(--primary-color);
   color: #fff;
   font-size: 15px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-color) 40%, transparent);
+  transition: all 0.18s var(--ease-spring);
 }
 .fp-main-btn:hover {
   background: var(--primary-hover-color);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--primary-color) 45%, transparent);
 }
 .fp-reset {
-  height: 40px;
-  padding: 0 20px;
-  border-radius: 8px;
-  border: 1px solid var(--grey-20);
+  height: 42px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  background: rgba(255, 255, 255, 0.55);
   color: var(--grey-80);
   font-size: 14px;
+  transition: all 0.18s var(--ease-spring);
 }
 .fp-reset:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.8);
 }
 .fp-task {
   margin-top: 12px;
@@ -231,10 +257,21 @@ onBeforeUnmount(stop);
   cursor: pointer;
   color: var(--grey-60);
   vertical-align: middle;
+  border-radius: 6px;
+  padding: 2px;
+  transition: background 0.15s var(--ease-spring), color 0.15s var(--ease-spring);
+}
+.fp-task-check:hover {
+  color: var(--green);
+  background: rgba(29, 29, 31, 0.05);
 }
 .fp-task-clear {
   margin-left: 8px;
   color: var(--grey-40);
+}
+.fp-task-clear:hover {
+  color: var(--grey-80);
+  background: rgba(29, 29, 31, 0.05);
 }
 .fp-pick-title {
   font-size: 13px;
@@ -244,15 +281,28 @@ onBeforeUnmount(stop);
 .fp-pick-list {
   max-height: 150px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 .fp-pick-item {
-  padding: 7px 10px;
-  border-radius: 6px;
+  max-width: 100%;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.45);
   font-size: 14px;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s var(--ease-spring);
 }
 .fp-pick-item:hover {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.75);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(20, 20, 40, 0.08);
 }
 .fp-pick-empty {
   font-size: 13px;

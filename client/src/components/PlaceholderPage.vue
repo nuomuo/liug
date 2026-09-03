@@ -28,12 +28,15 @@ const meta = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 6px 6px 0;
+  padding: 10px;
 }
 .pp-card {
-  background: var(--main-background-color);
-  border-radius: 14px;
-  box-shadow: var(--default-shadow);
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   padding: 50px 70px;
   text-align: center;
   color: var(--grey-30);

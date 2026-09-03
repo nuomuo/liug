@@ -150,7 +150,7 @@ export function calendarVisible(task) {
 }
 
 // ---------- 主题颜色 ----------
-const THEME_KEY = 'dida-clone-theme-color';
+const THEME_KEY = 'lumen-theme-color';
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -167,7 +167,7 @@ export function shade(hex, ratio) {
   return '#' + out.map((v) => v.toString(16).padStart(2, '0')).join('');
 }
 
-/** 应用主题色到 CSS 变量并持久化（与原版 primary/hover/active 三态一致） */
+/** 应用主题色到 CSS 变量并持久化（primary/hover/active 三态联动） */
 export function applyTheme(color) {
   const root = document.documentElement;
   root.style.setProperty('--primary-color', color);

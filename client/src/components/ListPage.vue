@@ -110,15 +110,19 @@ function priColor(p) {
   flex: 1;
   display: flex;
   overflow: hidden;
-  padding: 6px 6px 6px 0;
-  gap: 0;
+  padding: 10px;
+  gap: 10px;
 }
 .lp-side {
   width: 220px;
   flex: none;
-  background: var(--main-background-color);
-  border-radius: 10px 0 0 10px;
-  padding: 12px 8px;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
+  padding: 14px 8px;
   overflow-y: auto;
 }
 .lp-side-title {
@@ -131,16 +135,18 @@ function priColor(p) {
   display: flex;
   align-items: center;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--grey-80);
   font-size: 14px;
+  transition: background 0.2s var(--ease-spring), box-shadow 0.2s var(--ease-spring);
 }
 .lp-side-item:hover {
-  background: var(--grey-4);
+  background: rgba(255, 255, 255, 0.5);
 }
 .lp-side-item.active {
-  background: var(--grey-8);
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 0 0 1px var(--glass-border), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   color: var(--front-color);
   font-weight: 500;
 }
@@ -160,8 +166,12 @@ function priColor(p) {
 .lp-main {
   flex: 1;
   min-width: 0;
-  background: var(--main-background-color);
-  border-radius: 0 10px 10px 0;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -202,14 +212,18 @@ function priColor(p) {
   gap: 4px;
   height: 30px;
   padding: 0 14px;
-  border: 1px solid var(--grey-20);
-  border-radius: 8px;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 999px;
   font-size: 13px;
   color: var(--grey-80);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.2s var(--ease-spring);
 }
 .lp-add:hover {
   color: var(--primary-color);
   border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.7);
 }
 .lp-list {
   flex: 1;
@@ -220,12 +234,13 @@ function priColor(p) {
   display: flex;
   gap: 10px;
   padding: 9px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   border-bottom: 1px solid var(--grey-3);
+  transition: background 0.2s var(--ease-spring);
 }
 .lp-item:hover {
-  background: var(--grey-3);
+  background: rgba(255, 255, 255, 0.45);
 }
 .lp-check {
   margin-top: 1px;

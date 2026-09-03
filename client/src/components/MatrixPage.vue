@@ -187,22 +187,27 @@ const total = computed(() => store.tasks.filter((t) => t.status === 0).length);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 6px 6px 6px 0;
-  background: var(--main-background-color);
-  border-radius: 10px;
+  padding: 10px;
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
   min-width: 0;
 }
 .mp-header {
   display: flex;
   align-items: center;
-  padding: 10px 16px 4px;
+  padding: 12px 16px 6px;
   flex: none;
 }
 .mp-title {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
-  margin-right: 6px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 30px;
+  margin-right: 8px;
   padding-left: 10px;
 }
 .mp-hint {
@@ -225,17 +230,19 @@ const total = computed(() => store.tasks.filter((t) => t.status === 0).length);
   min-height: 0;
 }
 .quadrant {
-  background: #fff;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--grey-5);
-  transition: box-shadow 0.15s, border-color 0.15s;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: box-shadow 0.18s var(--ease-spring), border-color 0.18s var(--ease-spring), background 0.18s;
 }
 .quadrant.drag-over {
   border-color: var(--primary-color);
-  box-shadow: inset 0 0 0 2px var(--primary-color);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary-color) 55%, transparent), 0 8px 24px rgba(20, 20, 40, 0.12);
 }
 .quadrant-header {
   height: 40px;
