@@ -215,6 +215,9 @@ async function doLogout() {
 .sp-body {
   padding: 14px 20px 20px;
 }
+.sp-section + .sp-section {
+  margin-top: 22px;
+}
 .sp-section-title {
   font-size: 14px;
   font-weight: 600;

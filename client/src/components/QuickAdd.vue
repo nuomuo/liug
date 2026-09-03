@@ -130,8 +130,8 @@ function toggleTag(tag) {
   <div class="popup-cover global-quick-add-wrapper" @mousedown.self="store.quickAdd = { open: false, presetDate: null, presetTask: null }">
     <div class="global-quick-add">
       <div class="tl-quick">
-        <div class="task-input" @click="inputEl?.focus()">
-          <div class="task-title">
+        <div class="task-input">
+          <div class="task-title" @click="inputEl?.focus()">
             <input
               ref="inputEl"
               v-model="title"

@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { store, allTags, showToast } from '../store.js';
+import { api } from '../api.js';
 import Icon from './Icon.vue';
 
 const collapsed = ref({ list: false, tag: false, sub: true });
@@ -29,6 +30,105 @@ function toggleTag(tag) {
 
 function projectCount(p) {
   return store.tasks.filter((t) => t.projectId === p.id && t.status === 0).length;
+}
+
+// ---------- 添加清单 ----------
+const addingList = ref(false);
+const newListName = ref('');
+const addingInputEl = ref(null);
+
+async function showAddList() {
+  addingList.value = true;
+  newListName.value = '';
+  await nextTick();
+  addingInputEl.value?.focus();
+}
+
+async function confirmAddList() {
+  if (addingList.value === false) return; // blur 在输入框卸载后重复触发时直接忽略
+  const name = newListName.value.trim();
+  if (!name) {
+    addingList.value = false;
+    return;
+  }
+  // 先清空再收起，避免 blur 二次触发导致重复创建
+  newListName.value = '';
+  addingList.value = false;
+  try {
+    const p = await api.createProject({ name });
+    store.projects.push(p);
+    showToast(`清单「${name}」已创建`);
+  } catch (e) {
+    showToast(e?.data?.error || '创建清单失败');
+  }
+}
+
+// ---------- 编辑清单（右键：改名 / 图标 / 颜色 / 删除） ----------
+const editing = ref(null); // 正在编辑的清单对象
+const editForm = ref({ name: '', emoji: '', color: '#484553' });
+const editPos = ref({ x: 0, y: 0 });
+
+const emojiPresets = ['', '📋', '💼', '🏠', '🛒', '🎯', '📚', '✈️', '💡', '🎨', '💪', '💰', '🎮', '❤️', '⭐', '🔥'];
+const colorPresets = [
+  '#484553', '#0c9e6e', '#2f6fe4', '#d9544d',
+  '#e8852c', '#8b6ff0', '#0caeae', '#e06a9f',
+  '#7a5af8', '#c9a34c', '#5f8b4b', '#3f5f7a',
+];
+
+function openProjectMenu(p, e) {
+  editing.value = p;
+  editForm.value = { name: p.name, emoji: p.emoji || '', color: p.color || '#484553' };
+  // 防止弹层超出视口
+  editPos.value = {
+    x: Math.min(e.clientX, window.innerWidth - 260),
+    y: Math.min(e.clientY, window.innerHeight - 330),
+  };
+}
+function closeProjectMenu() {
+  editing.value = null;
+}
+
+async function saveProject() {
+  const p = editing.value;
+  if (!p) return;
+  const name = editForm.value.name.trim();
+  if (!name) {
+    showToast('清单名称不能为空');
+    return;
+  }
+  try {
+    const updated = await api.updateProject(p.id, {
+      name,
+      emoji: editForm.value.emoji,
+      color: editForm.value.color,
+    });
+    Object.assign(p, updated);
+    showToast('清单已更新');
+    closeProjectMenu();
+  } catch (e) {
+    showToast(e?.data?.error || '更新清单失败');
+  }
+}
+
+async function removeProject() {
+  const p = editing.value;
+  if (!p) return;
+  if (p.id === 1) {
+    showToast('收集箱不可删除');
+    return;
+  }
+  if (!confirm(`删除清单「${p.name}」及其所有任务？`)) return;
+  try {
+    await api.deleteProject(p.id);
+    store.projects = store.projects.filter((x) => x.id !== p.id);
+    store.tasks = store.tasks.filter((t) => t.projectId !== p.id);
+    const i = store.selectedProjectIds.indexOf(p.id);
+    if (i >= 0) store.selectedProjectIds.splice(i, 1);
+    showToast('清单已删除');
+    closeProjectMenu();
+  } catch (e) {
+    showToast(e?.data?.error || '删除清单失败');
+  }
 }
 </script>
 
@@ -59,7 +159,9 @@ function projectCount(p) {
           v-for="p in store.projects"
           :key="p.id"
           class="option-item"
+          :title="`${p.name}（右键编辑）`"
           @click="toggleProject(p.id)"
+          @contextmenu.prevent="openProjectMenu(p, $event)"
         >
           <span class="option-left">
             <Icon v-if="p.emoji === '' && p.name === '收集箱'" name="inbox-list" :size="18" class="opt-icon" />
@@ -71,11 +173,23 @@ function projectCount(p) {
             <Icon name="right-panel-all-selected" :size="9" />
           </span>
         </li>
-        <li class="option-item muted" @click="showToast('右键清单或在任务中切换清单即可管理')">
+        <li v-if="!addingList" class="option-item muted" @click="showAddList">
           <span class="option-left">
             <Icon name="add-small" :size="14" class="opt-icon" />
             <span class="option-name">添加清单…</span>
           </span>
+        </li>
+        <li v-else class="option-item add-list-row">
+          <input
+            ref="addingInputEl"
+            v-model="newListName"
+            class="add-list-input"
+            placeholder="清单名称，回车确认"
+            maxlength="30"
+            @keydown.enter.prevent="confirmAddList"
+            @keydown.esc="addingList = false"
+            @blur="confirmAddList"
+          />
         </li>
       </template>
 
@@ -130,6 +244,51 @@ function projectCount(p) {
         </li>
       </template>
     </div>
+
+    <!-- 清单编辑弹层：右键清单打开 -->
+    <template v-if="editing">
+      <div class="proj-edit-backdrop" @mousedown.self="closeProjectMenu"></div>
+      <div class="proj-edit" :style="{ left: editPos.x + 'px', top: editPos.y + 'px' }">
+        <input
+          v-model="editForm.name"
+          class="proj-edit-name"
+          maxlength="30"
+          placeholder="清单名称"
+          @keydown.enter="saveProject"
+          @keydown.esc="closeProjectMenu"
+        />
+        <div class="proj-edit-label">图标</div>
+        <div class="emoji-grid">
+          <span
+            v-for="em in emojiPresets"
+            :key="em"
+            class="emoji-cell"
+            :class="{ sel: editForm.emoji === em }"
+            @click="editForm.emoji = em"
+          >{{ em || '◦' }}</span>
+        </div>
+        <div class="proj-edit-label">颜色（决定任务标签底色）</div>
+        <div class="color-grid">
+          <span
+            v-for="c in colorPresets"
+            :key="c"
+            class="color-cell"
+            :class="{ sel: editForm.color === c }"
+            :style="{ background: c }"
+            @click="editForm.color = c"
+          ></span>
+          <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
+            <input type="color" v-model="editForm.color" />
+          </label>
+        </div>
+        <div class="proj-edit-actions">
+          <button v-if="editing.id !== 1" class="proj-del" @click="removeProject">删除</button>
+          <span class="spacer"></span>
+          <button class="proj-cancel" @click="closeProjectMenu">取消</button>
+          <button class="proj-save" @click="saveProject">保存</button>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -252,6 +411,144 @@ function projectCount(p) {
 }
 .option-item.muted .option-name {
   color: var(--grey-40);
+}
+.add-list-row {
+  padding: 4px 16px;
+  height: auto;
+}
+.add-list-input {
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--primary-color);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  outline: none;
+  color: var(--front-color);
+  background: #fff;
+}
+
+/* ---------- 清单编辑弹层 ---------- */
+.proj-edit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+}
+.proj-edit {
+  position: fixed;
+  z-index: 1201;
+  width: 244px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: var(--default-shadow);
+  padding: 12px;
+}
+.proj-edit-name {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--grey-20);
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+  color: var(--front-color);
+}
+.proj-edit-name:focus {
+  border-color: var(--primary-color);
+}
+.proj-edit-label {
+  font-size: 11px;
+  color: var(--grey-40);
+  margin: 10px 0 6px;
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.emoji-cell {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--grey-30);
+}
+.emoji-cell:hover {
+  background: var(--grey-5);
+}
+.emoji-cell.sel {
+  background: var(--grey-10);
+  outline: 1px solid var(--primary-color);
+}
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.color-cell {
+  height: 22px;
+  border-radius: 5px;
+  cursor: pointer;
+  position: relative;
+}
+.color-cell:hover {
+  filter: brightness(1.12);
+}
+.color-cell.sel {
+  outline: 2px solid var(--front-color);
+  outline-offset: 1px;
+}
+.color-cell.custom {
+  overflow: hidden;
+}
+.color-cell.custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.proj-edit-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+}
+.proj-edit-actions .spacer {
+  flex: 1;
+}
+.proj-edit-actions button {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.proj-del {
+  border-color: transparent;
+  background: none;
+  color: #d9544d;
+  padding: 0 8px !important;
+}
+.proj-del:hover {
+  background: #fdecec;
+}
+.proj-cancel {
+  background: none;
+  color: var(--grey-60);
+  border-color: var(--grey-20) !important;
+}
+.proj-cancel:hover {
+  color: var(--front-color);
+}
+.proj-save {
+  background: var(--primary-color);
+  color: #fff;
+}
+.proj-save:hover {
+  background: var(--primary-hover-color);
 }
 .empty-hint {
   font-size: 12px;
