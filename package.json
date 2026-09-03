@@ -1,0 +1,13 @@
+{
+  "name": "dida-clone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "清单日历 —— 模仿滴答清单网页版的日程管理应用（Vue3 + Express + SQLite）",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "server": "npm start --prefix server",
+    "client": "npm run dev --prefix client",
+    "import": "node server/import-csv.js",
+    "start": "node server/index.js"
+  }
+}

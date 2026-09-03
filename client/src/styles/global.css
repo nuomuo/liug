@@ -1,0 +1,176 @@
+/* ============ 设计令牌（提取自滴答清单 blacksea-photograph-pro-theme） ============ */
+:root {
+  --primary-color: #484553;              /* rgb(72,69,83) */
+  --primary-hover-color: #6d6a75;        /* rgb(109,106,117) btn-hover */
+  --primary-active-color: #3f3c47;       /* rgb(63,60,71) btn-active */
+  --front-color: #191919;                /* rgb(25,25,25) */
+  --front-color-rgb: 25, 25, 25;
+  --main-background-color: #ffffff;
+  --card-bg: #fafafa;
+  --gallery: #eeeeee;
+
+  --priority-low: #4772fa;
+  --priority-medium: #faa80c;
+  --priority-high: #e13e39;
+  --green: #0cce9c;
+  --warn-red: #e03131;
+
+  /* 灰阶 = front-color + 透明度 */
+  --grey-1: rgba(25, 25, 25, 0.01);
+  --grey-3: rgba(25, 25, 25, 0.03);
+  --grey-4: rgba(25, 25, 25, 0.04);
+  --grey-5: rgba(25, 25, 25, 0.05);
+  --grey-8: rgba(25, 25, 25, 0.08);
+  --grey-10: rgba(25, 25, 25, 0.1);
+  --grey-13: rgba(25, 25, 25, 0.13);
+  --grey-20: rgba(25, 25, 25, 0.2);
+  --grey-30: rgba(25, 25, 25, 0.3);
+  --grey-40: rgba(25, 25, 25, 0.4);
+  --grey-50: rgba(25, 25, 25, 0.5);
+  --grey-60: rgba(25, 25, 25, 0.6);
+  --grey-80: rgba(25, 25, 25, 0.8);
+
+  --default-shadow: 0 5px 18px 0 rgba(0, 0, 0, 0.2);
+  --left-sidebar-bg: #0b0b0b;                /* 黑海主题默认：主色 #484553 加深 85% */
+  --screen-tint: rgba(72, 69, 83, 0.12);     /* 背景照片着色，随主题色联动 */
+
+  --font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: var(--font-family);
+  color: var(--front-color);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+button { font-family: inherit; background: none; border: none; cursor: pointer; color: inherit; }
+input, textarea { font-family: inherit; outline: none; }
+a { text-decoration: none; color: inherit; }
+ul, li { list-style: none; }
+
+/* ============ 滚动条 ============ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--primary-color) 16%, transparent); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--primary-color) 28%, transparent); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.with-no-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ============ 图标基类（与滴答一致：svg + use 引用雪碧图） ============ */
+.icon-sprite { position: absolute; width: 0; height: 0; }
+
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  fill: currentColor;
+}
+
+/* ============ 通用悬浮图标按钮背景 ============ */
+.bgIconWrapper { position: relative; display: flex; align-items: center; }
+.bgIconWrapper .bg-hover {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--grey-5);
+  border-radius: 5px;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.bgIconWrapper:hover .bg-hover { opacity: 1; }
+.bgIconWrapper > svg, .bgIconWrapper > button { position: relative; z-index: 1; }
+
+/* ============ 下拉菜单 ============ */
+.dropdown-menu {
+  position: fixed;
+  z-index: 1200;
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px 0;
+  min-width: 160px;
+  box-shadow: var(--default-shadow);
+  animation: menu-pop 0.12s ease-out;
+}
+@keyframes menu-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.dropdown-menu li {
+  padding: 0 14px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 13px;
+  color: var(--grey-80);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.dropdown-menu li:hover { background: var(--grey-4); }
+.dropdown-menu li .icon { width: 14px; height: 14px; color: var(--grey-60); }
+.dropdown-menu li.danger, .dropdown-menu li.danger .icon { color: var(--warn-red); }
+
+/* ============ 复选框（小方框样式，与筛选面板一致） ============ */
+.mini-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--grey-20);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  background: #fff;
+  transition: all 0.12s;
+}
+.mini-checkbox:hover { border-color: var(--primary-color); }
+.mini-checkbox.checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+.mini-checkbox .icon { width: 9px; height: 9px; color: #fff; opacity: 0; }
+.mini-checkbox.checked .icon { opacity: 1; }
+
+/* ============ 弹层遮罩 ============ */
+.popup-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 1040;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+/* ============ 工具类 ============ */
+.text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flex { display: flex; }
+
+/* 周末/节假日绿色文本 */
+.text-green { color: var(--green); }
+
+/* Toast 提示 */
+.global-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  background: rgba(25, 25, 25, 0.85);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  animation: toast-in 0.2s ease-out;
+  pointer-events: none;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
