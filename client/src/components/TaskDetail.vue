@@ -47,21 +47,42 @@ const openMenu = ref('');
 const dateStr = computed({
   get: () => props.task.startDate?.slice(0, 10) || '',
   set: (v) => {
-    const time = props.task.isAllDay ? 'T00:00:00' : 'T' + (props.task.startDate?.slice(11) || '09:00:00');
-    const due = props.task.dueDate || props.task.startDate;
-    const dueTime = props.task.isAllDay ? 'T00:00:00' : 'T' + (due?.slice(11) || '09:00:00');
-    const newDue = v && due && due.slice(0, 10) < v ? v + dueTime : due;
-    updateTaskLocal(props.task, { startDate: v ? v + time : null, dueDate: newDue });
+    const t = props.task;
+    const startTime = t.isAllDay ? 'T00:00:00' : 'T' + (t.startDate?.slice(11) || '09:00:00');
+    const dueTime = t.isAllDay ? 'T00:00:00' : 'T' + (t.dueDate?.slice(11) || startTime.slice(1));
+    const startDay = t.startDate?.slice(0, 10);
+    const dueDay = t.dueDate?.slice(0, 10);
+    if (!v) {
+      // 清空开始日期：连同到期日一起清空，避免出现"只有到期日"的孤儿任务
+      updateTaskLocal(t, { startDate: null, dueDate: null });
+      return;
+    }
+    const patch = { startDate: v + startTime };
+    if (!t.dueDate || !startDay || dueDay === startDay) {
+      // 原本无日期或单日任务：整体平移到新日期，保持单日
+      patch.dueDate = v + (t.dueDate ? dueTime : startTime);
+    } else if (dueDay < v) {
+      // 范围任务：开始日期晚于到期日期 → 到期日跟随，避免倒挂
+      patch.dueDate = v + dueTime;
+    }
+    // 其余情况（合法范围调整开始日期）：到期日保持不变
+    updateTaskLocal(t, patch);
   },
 });
 // 结束日期（独立于开始日期，支持时间范围）
 const endDateStr = computed({
   get: () => props.task.dueDate?.slice(0, 10) || '',
   set: (v) => {
-    if (!props.task.startDate) return;
-    const time = props.task.isAllDay ? 'T00:00:00' : 'T' + (props.task.dueDate?.slice(11) || '09:00:00');
-    const start = props.task.startDate.slice(0, 10);
-    updateTaskLocal(props.task, { dueDate: v && v >= start ? v + time : start + time });
+    const t = props.task;
+    const time = t.isAllDay ? 'T00:00:00' : 'T' + (t.dueDate?.slice(11) || '09:00:00');
+    const start = t.startDate?.slice(0, 10);
+    if (!start) {
+      // 无开始日期：直接设为该日的单日任务（清空则一并清除）
+      if (v) updateTaskLocal(t, { startDate: v + time, dueDate: v + time });
+      else updateTaskLocal(t, { startDate: null, dueDate: null });
+      return;
+    }
+    updateTaskLocal(t, { dueDate: v && v >= start ? v + time : start + time });
   },
 });
 const timeStr = computed({

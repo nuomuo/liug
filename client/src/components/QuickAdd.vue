@@ -25,14 +25,10 @@ onMounted(() => {
       timeStr.value = `${p(preset.getHours())}:${p(preset.getMinutes())}`;
     }
   }
-  // 从四象限添加：预置优先级与日期
+  // 从四象限添加：预置与象限对应的优先级（q1→高5、q2→中3、q3→低1、q4→无0）
   const q = store.quickAdd.presetQuadrant;
   if (q) {
-    priority.value = q.important ? 5 : 0;
-    if (q.urgent) {
-      const d = new Date();
-      dateStr.value = fmtDate(d);
-    }
+    priority.value = q.priority ?? 0;
   }
   projectId.value = store.projects[0]?.id ?? null;
   nextTick(() => inputEl.value?.focus());
@@ -442,6 +438,10 @@ function toggleTag(tag) {
 }
 .emoji {
   font-size: 15px;
+  /* 与无 emoji 行的 14px 图标对齐在同一竖向位置 */
+  width: 15px;
+  text-align: center;
+  flex: none;
 }
 .tag-cloud {
   display: flex;

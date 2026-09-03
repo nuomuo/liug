@@ -173,8 +173,8 @@ export function applyTheme(color) {
   root.style.setProperty('--primary-color', color);
   root.style.setProperty('--primary-hover-color', shade(color, 0.15));
   root.style.setProperty('--primary-active-color', shade(color, -0.15));
-  // 四周衍生色：左侧图标栏深色背景（原版黑海主题的 #0b0b0b 即主色加深 85% 而来）
-  root.style.setProperty('--left-sidebar-bg', shade(color, -0.85));
+  // 四周衍生色：左侧图标栏深色背景（ 即主色加深 20% ）
+  root.style.setProperty('--left-sidebar-bg', shade(color, -0.2));
   // 页面背景照片整体着色，随主题色联动
   const [r, g, b] = hexToRgb(color);
   root.style.setProperty('--screen-tint', `rgba(${r}, ${g}, ${b}, 0.12)`);

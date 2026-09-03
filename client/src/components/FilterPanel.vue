@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { store, allTags, showToast } from '../store.js';
 import { api } from '../api.js';
 import Icon from './Icon.vue';
@@ -24,6 +24,14 @@ function toggleProject(id) {
   }
 }
 
+// 组级复选框：全选 / 清空该组清单（并取消标签筛选）
+function toggleProjectGroup() {
+  const ids = store.projects.map((p) => p.id);
+  const allSelected = ids.length > 0 && ids.every((id) => store.selectedProjectIds.includes(id));
+  store.selectedProjectIds = allSelected ? [] : ids;
+  if (!allSelected) store.selectedTag = '';
+}
+
 function toggleTag(tag) {
   store.selectedTag = store.selectedTag === tag ? '' : tag;
 }
@@ -32,32 +40,31 @@ function projectCount(p) {
   return store.tasks.filter((t) => t.projectId === p.id && t.status === 0).length;
 }
 
-// ---------- 添加清单 ----------
+// ---------- 添加清单（弹窗，复用编辑弹层样式） ----------
 const addingList = ref(false);
 const newListName = ref('');
-const addingInputEl = ref(null);
 
-async function showAddList() {
+function showAddList() {
   addingList.value = true;
   newListName.value = '';
-  await nextTick();
-  addingInputEl.value?.focus();
+  editForm.value = { name: '', emoji: '', color: colorPresets[Math.floor(Math.random() * colorPresets.length)] };
 }
 
-async function confirmAddList() {
-  if (addingList.value === false) return; // blur 在输入框卸载后重复触发时直接忽略
+async function createList() {
   const name = newListName.value.trim();
   if (!name) {
-    addingList.value = false;
+    showToast('请输入清单名称');
     return;
   }
-  // 先清空再收起，避免 blur 二次触发导致重复创建
-  newListName.value = '';
-  addingList.value = false;
   try {
-    const p = await api.createProject({ name });
+    const p = await api.createProject({
+      name,
+      emoji: editForm.value.emoji,
+      color: editForm.value.color,
+    });
     store.projects.push(p);
     showToast(`清单「${name}」已创建`);
+    addingList.value = false;
   } catch (e) {
     showToast(e?.data?.error || '创建清单失败');
   }
@@ -143,14 +150,18 @@ async function removeProject() {
 
     <div class="filter-list">
       <!-- 清单 -->
-      <div class="group-header" @click="collapsed.list = !collapsed.list">
-        <span class="group-label">
+      <div class="group-header">
+        <span class="group-label" @click="collapsed.list = !collapsed.list">
           <span class="collapse-arrow" :class="{ collapsed: collapsed.list }">
             <Icon name="down-arrow" :size="12" />
           </span>
           <span class="group-name">清单</span>
         </span>
-        <span class="mini-checkbox" :class="{ checked: store.selectedProjectIds.length > 0 }">
+        <span
+          class="mini-checkbox"
+          :class="{ checked: store.selectedProjectIds.length > 0 }"
+          @click.stop="toggleProjectGroup"
+        >
           <Icon name="right-panel-all-selected" :size="9" />
         </span>
       </div>
@@ -173,23 +184,11 @@ async function removeProject() {
             <Icon name="right-panel-all-selected" :size="9" />
           </span>
         </li>
-        <li v-if="!addingList" class="option-item muted" @click="showAddList">
+        <li class="option-item muted" @click="showAddList">
           <span class="option-left">
             <Icon name="add-small" :size="14" class="opt-icon" />
             <span class="option-name">添加清单…</span>
           </span>
-        </li>
-        <li v-else class="option-item add-list-row">
-          <input
-            ref="addingInputEl"
-            v-model="newListName"
-            class="add-list-input"
-            placeholder="清单名称，回车确认"
-            maxlength="30"
-            @keydown.enter.prevent="confirmAddList"
-            @keydown.esc="addingList = false"
-            @blur="confirmAddList"
-          />
         </li>
       </template>
 
@@ -286,6 +285,52 @@ async function removeProject() {
           <span class="spacer"></span>
           <button class="proj-cancel" @click="closeProjectMenu">取消</button>
           <button class="proj-save" @click="saveProject">保存</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- 新增清单弹窗 -->
+    <template v-if="addingList">
+      <div class="proj-edit-backdrop" @mousedown.self="addingList = false"></div>
+      <div class="proj-edit proj-edit-center">
+        <div class="proj-edit-title">新增清单</div>
+        <input
+          v-model="newListName"
+          class="proj-edit-name"
+          maxlength="30"
+          placeholder="清单名称"
+          autofocus
+          @keydown.enter="createList"
+          @keydown.esc="addingList = false"
+        />
+        <div class="proj-edit-label">图标</div>
+        <div class="emoji-grid">
+          <span
+            v-for="em in emojiPresets"
+            :key="em"
+            class="emoji-cell"
+            :class="{ sel: editForm.emoji === em }"
+            @click="editForm.emoji = em"
+          >{{ em || '◦' }}</span>
+        </div>
+        <div class="proj-edit-label">颜色（决定任务标签底色）</div>
+        <div class="color-grid">
+          <span
+            v-for="c in colorPresets"
+            :key="c"
+            class="color-cell"
+            :class="{ sel: editForm.color === c }"
+            :style="{ background: c }"
+            @click="editForm.color = c"
+          ></span>
+          <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
+            <input type="color" v-model="editForm.color" />
+          </label>
+        </div>
+        <div class="proj-edit-actions">
+          <span class="spacer"></span>
+          <button class="proj-cancel" @click="addingList = false">取消</button>
+          <button class="proj-save" @click="createList">创建</button>
         </div>
       </div>
     </template>
@@ -412,22 +457,6 @@ async function removeProject() {
 .option-item.muted .option-name {
   color: var(--grey-40);
 }
-.add-list-row {
-  padding: 4px 16px;
-  height: auto;
-}
-.add-list-input {
-  width: 100%;
-  height: 26px;
-  border: 1px solid var(--primary-color);
-  border-radius: 6px;
-  padding: 0 8px;
-  font-size: 12px;
-  outline: none;
-  color: var(--front-color);
-  background: #fff;
-}
-
 /* ---------- 清单编辑弹层 ---------- */
 .proj-edit-backdrop {
   position: fixed;
@@ -442,6 +471,16 @@ async function removeProject() {
   border-radius: 10px;
   box-shadow: var(--default-shadow);
   padding: 12px;
+}
+.proj-edit-center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.proj-edit-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
 }
 .proj-edit-name {
   width: 100%;

@@ -5,27 +5,18 @@ import Icon from './Icon.vue';
 
 const todayStr = fmtDate(new Date());
 
-// 重要 = 中/高优先级；紧急 = 今天或已过期
-function isImportant(t) {
-  return t.priority >= 3;
-}
-function isUrgent(t) {
-  return t.dueDate && t.dueDate.slice(0, 10) <= todayStr;
-}
-
+// 四象限与全局四级优先级一一对应：q1→高(5)、q2→中(3)、q3→低(1)、q4→无(0)
 const QUADRANTS = [
-  { key: 'q1', title: '重要且紧急', color: '#FF5F68', important: true, urgent: true },
-  { key: 'q2', title: '重要不紧急', color: '#FFB000', important: true, urgent: false },
-  { key: 'q3', title: '不重要但紧急', color: '#4772FA', important: false, urgent: true },
-  { key: 'q4', title: '不重要不紧急', color: '#0CCE9C', important: false, urgent: false },
+  { key: 'q1', title: '重要且紧急', color: '#FF5F68', priority: 5 },
+  { key: 'q2', title: '重要不紧急', color: '#FFB000', priority: 3 },
+  { key: 'q3', title: '不重要但紧急', color: '#4772FA', priority: 1 },
+  { key: 'q4', title: '不重要不紧急', color: '#0CCE9C', priority: 0 },
 ];
 
 function quadrantOf(t) {
-  const imp = isImportant(t);
-  const urg = isUrgent(t);
-  if (imp && urg) return 'q1';
-  if (imp && !urg) return 'q2';
-  if (!imp && urg) return 'q3';
+  if (t.priority === 5) return 'q1';
+  if (t.priority === 3) return 'q2';
+  if (t.priority === 1) return 'q3';
   return 'q4';
 }
 
@@ -106,18 +97,8 @@ async function onQuadDrop(e, q) {
   if (!t) return;
   if (quadrantOf(t) === q.key) return;
 
-  const patch = { priority: q.important ? 5 : 0 };
-  const p = (n) => String(n).padStart(2, '0');
-  const now = new Date();
-  const todayIso = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
-  if (q.urgent) {
-    patch.dueDate = todayIso + 'T23:59:00';
-    if (!t.startDate) patch.startDate = todayIso + 'T00:00:00';
-  } else {
-    patch.dueDate = null;
-    patch.startDate = null;
-  }
-  await updateTaskLocal(t, patch);
+  // 只切换优先级，不改动任务的日期范围
+  await updateTaskLocal(t, { priority: q.priority });
 }
 
 function openDetail(e, t) {
@@ -140,7 +121,7 @@ const total = computed(() => store.tasks.filter((t) => t.status === 0).length);
   <div class="matrix-page">
     <div class="mp-header">
       <h1 class="mp-title">四象限</h1>
-      <div class="mp-hint">拖动任务到不同象限：重要 ↔ 优先级，紧急 ↔ 截止日期</div>
+      <div class="mp-hint">拖动任务到不同象限即可切换优先级（高 / 中 / 低 / 无）</div>
       <div class="mp-more">
         <div class="bgIconWrapper">
           <span class="bg-hover"></span>

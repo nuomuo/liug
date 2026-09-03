@@ -103,6 +103,9 @@ async function importCsv() {
   }
 }
 
+// 左面板（迷你日历 + 筛选）显示/隐藏，点击日历筛选图标切换（复刻原版 expendMiniCal）
+const showLeftPanel = ref(true);
+
 // 左面板宽度拖拽（复刻 detail-dragger）
 const leftWidth = ref(248);
 const dragging = ref(false);
@@ -131,9 +134,9 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
 </script>
 
 <template>
-  <div class="calendar-page">
+  <div class="calendar-page" :class="{ 'no-left': !showLeftPanel }">
     <!-- 左侧：迷你日历 + 筛选 -->
-    <div class="tk-calendar-left-view" :style="{ width: leftWidth + 'px' }">
+    <div v-if="showLeftPanel" class="tk-calendar-left-view" :style="{ width: leftWidth + 'px' }">
       <MiniCalendar />
       <FilterPanel />
       <div class="detail-dragger" :class="{ active: dragging }" @mousedown="onDraggerDown"></div>
@@ -143,7 +146,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
     <div class="tk-calendar-content">
       <div class="c-nav">
         <div class="c-range-wrap">
-          <div class="nav-icon-btn" title="筛选清单" @click="showToast('在左侧面板勾选清单/标签即可筛选')">
+          <div class="nav-icon-btn" title="筛选清单" @click="showLeftPanel = !showLeftPanel">
             <div class="bgIconWrapper">
               <span class="bg-hover"></span>
               <Icon name="calendar-filter" :size="24" />
@@ -231,6 +234,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
   overflow: hidden;
   padding: 6px 6px 6px 0;
   min-width: 0;
+}
+/* 左面板隐藏时：补上左侧内边距，右侧圆角补全 */
+.calendar-page.no-left {
+  padding-left: 6px;
+}
+.calendar-page.no-left .tk-calendar-content {
+  border-radius: 10px;
 }
 
 /* 左侧面板 */
