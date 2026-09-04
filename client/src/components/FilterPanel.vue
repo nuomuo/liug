@@ -244,95 +244,99 @@ async function removeProject() {
       </template>
     </div>
 
-    <!-- 清单编辑弹层：右键清单打开 -->
+    <!-- 清单编辑弹层：右键清单打开（传送到 body，避免被左侧玻璃面板的层叠上下文遮挡） -->
     <template v-if="editing">
-      <div class="proj-edit-backdrop" @mousedown.self="closeProjectMenu"></div>
-      <div class="proj-edit" :style="{ left: editPos.x + 'px', top: editPos.y + 'px' }">
-        <input
-          v-model="editForm.name"
-          class="proj-edit-name"
-          maxlength="30"
-          placeholder="清单名称"
-          @keydown.enter="saveProject"
-          @keydown.esc="closeProjectMenu"
-        />
-        <div class="proj-edit-label">图标</div>
-        <div class="emoji-grid">
-          <span
-            v-for="em in emojiPresets"
-            :key="em"
-            class="emoji-cell"
-            :class="{ sel: editForm.emoji === em }"
-            @click="editForm.emoji = em"
-          >{{ em || '◦' }}</span>
+      <Teleport to="body">
+        <div class="proj-edit-backdrop" @mousedown.self="closeProjectMenu"></div>
+        <div class="proj-edit" :style="{ left: editPos.x + 'px', top: editPos.y + 'px' }">
+          <input
+            v-model="editForm.name"
+            class="proj-edit-name"
+            maxlength="30"
+            placeholder="清单名称"
+            @keydown.enter="saveProject"
+            @keydown.esc="closeProjectMenu"
+          />
+          <div class="proj-edit-label">图标</div>
+          <div class="emoji-grid">
+            <span
+              v-for="em in emojiPresets"
+              :key="em"
+              class="emoji-cell"
+              :class="{ sel: editForm.emoji === em }"
+              @click="editForm.emoji = em"
+            >{{ em || '◦' }}</span>
+          </div>
+          <div class="proj-edit-label">颜色（决定任务标签底色）</div>
+          <div class="color-grid">
+            <span
+              v-for="c in colorPresets"
+              :key="c"
+              class="color-cell"
+              :class="{ sel: editForm.color === c }"
+              :style="{ background: c }"
+              @click="editForm.color = c"
+            ></span>
+            <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
+              <input type="color" v-model="editForm.color" />
+            </label>
+          </div>
+          <div class="proj-edit-actions">
+            <button v-if="editing.id !== 1" class="proj-del" @click="removeProject">删除</button>
+            <span class="spacer"></span>
+            <button class="proj-cancel" @click="closeProjectMenu">取消</button>
+            <button class="proj-save" @click="saveProject">保存</button>
+          </div>
         </div>
-        <div class="proj-edit-label">颜色（决定任务标签底色）</div>
-        <div class="color-grid">
-          <span
-            v-for="c in colorPresets"
-            :key="c"
-            class="color-cell"
-            :class="{ sel: editForm.color === c }"
-            :style="{ background: c }"
-            @click="editForm.color = c"
-          ></span>
-          <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
-            <input type="color" v-model="editForm.color" />
-          </label>
-        </div>
-        <div class="proj-edit-actions">
-          <button v-if="editing.id !== 1" class="proj-del" @click="removeProject">删除</button>
-          <span class="spacer"></span>
-          <button class="proj-cancel" @click="closeProjectMenu">取消</button>
-          <button class="proj-save" @click="saveProject">保存</button>
-        </div>
-      </div>
+      </Teleport>
     </template>
 
     <!-- 新增清单弹窗 -->
     <template v-if="addingList">
-      <div class="proj-edit-backdrop" @mousedown.self="addingList = false"></div>
-      <div class="proj-edit proj-edit-center">
-        <div class="proj-edit-title">新增清单</div>
-        <input
-          v-model="newListName"
-          class="proj-edit-name"
-          maxlength="30"
-          placeholder="清单名称"
-          autofocus
-          @keydown.enter="createList"
-          @keydown.esc="addingList = false"
-        />
-        <div class="proj-edit-label">图标</div>
-        <div class="emoji-grid">
-          <span
-            v-for="em in emojiPresets"
-            :key="em"
-            class="emoji-cell"
-            :class="{ sel: editForm.emoji === em }"
-            @click="editForm.emoji = em"
-          >{{ em || '◦' }}</span>
+      <Teleport to="body">
+        <div class="proj-edit-backdrop" @mousedown.self="addingList = false"></div>
+        <div class="proj-edit proj-edit-center">
+          <div class="proj-edit-title">新增清单</div>
+          <input
+            v-model="newListName"
+            class="proj-edit-name"
+            maxlength="30"
+            placeholder="清单名称"
+            autofocus
+            @keydown.enter="createList"
+            @keydown.esc="addingList = false"
+          />
+          <div class="proj-edit-label">图标</div>
+          <div class="emoji-grid">
+            <span
+              v-for="em in emojiPresets"
+              :key="em"
+              class="emoji-cell"
+              :class="{ sel: editForm.emoji === em }"
+              @click="editForm.emoji = em"
+            >{{ em || '◦' }}</span>
+          </div>
+          <div class="proj-edit-label">颜色（决定任务标签底色）</div>
+          <div class="color-grid">
+            <span
+              v-for="c in colorPresets"
+              :key="c"
+              class="color-cell"
+              :class="{ sel: editForm.color === c }"
+              :style="{ background: c }"
+              @click="editForm.color = c"
+            ></span>
+            <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
+              <input type="color" v-model="editForm.color" />
+            </label>
+          </div>
+          <div class="proj-edit-actions">
+            <span class="spacer"></span>
+            <button class="proj-cancel" @click="addingList = false">取消</button>
+            <button class="proj-save" @click="createList">创建</button>
+          </div>
         </div>
-        <div class="proj-edit-label">颜色（决定任务标签底色）</div>
-        <div class="color-grid">
-          <span
-            v-for="c in colorPresets"
-            :key="c"
-            class="color-cell"
-            :class="{ sel: editForm.color === c }"
-            :style="{ background: c }"
-            @click="editForm.color = c"
-          ></span>
-          <label class="color-cell custom" :style="{ background: editForm.color }" title="自定义颜色">
-            <input type="color" v-model="editForm.color" />
-          </label>
-        </div>
-        <div class="proj-edit-actions">
-          <span class="spacer"></span>
-          <button class="proj-cancel" @click="addingList = false">取消</button>
-          <button class="proj-save" @click="createList">创建</button>
-        </div>
-      </div>
+      </Teleport>
     </template>
   </div>
 </template>
