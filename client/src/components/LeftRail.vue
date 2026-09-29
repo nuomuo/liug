@@ -4,8 +4,8 @@ import { store, showToast, logout } from '../store.js';
 import Icon from './Icon.vue';
 
 const railItems = [
-  { key: 'list', icon: 'list-sidebar', label: '任务' },
   { key: 'calendar', icon: 'calendar-sidebar', label: '日历' },
+  { key: 'list', icon: 'list-sidebar', label: '任务' },
   { key: 'matrix', icon: 'matrix-sidebar', label: '四象限' },
   { key: 'focus', icon: 'sidebar-focus-sidebar', label: '专注' },
   { key: 'habit', icon: 'habit-sidebar', label: '习惯' },

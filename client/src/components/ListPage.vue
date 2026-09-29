@@ -14,6 +14,15 @@ const tasks = computed(() =>
     .filter((t) => (selectedList.value === 0 ? true : t.projectId === selectedList.value))
     .filter((t) => (showDone.value ? true : t.status !== 2))
     .sort((a, b) => {
+      // 已完成任务沉底，按完成时间倒序（最近完成在前）
+      const aDone = a.status === 2 ? 1 : 0;
+      const bDone = b.status === 2 ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      if (aDone) {
+        const ac = a.completedAt || '';
+        const bc = b.completedAt || '';
+        if (ac !== bc) return ac < bc ? 1 : -1;
+      }
       const ad = a.dueDate || '9999';
       const bd = b.dueDate || '9999';
       if (ad !== bd) return ad < bd ? -1 : 1;
