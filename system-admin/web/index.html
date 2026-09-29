@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>系统管理 · 用户管理</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- 登录 -->
+  <div id="login-view" class="login-wrap hidden">
+    <div class="card login-card">
+      <div class="login-title">系统管理</div>
+      <div class="login-sub">仅管理员可登录 · 用户管理</div>
+      <label class="field">
+        <span class="field-label">用户名</span>
+        <input id="login-username" type="text" placeholder="管理员账户" autocomplete="username" />
+      </label>
+      <label class="field">
+        <span class="field-label">密码</span>
+        <input id="login-password" type="password" placeholder="密码" autocomplete="current-password" />
+      </label>
+      <button id="login-btn" class="btn primary full" onclick="login()">登录</button>
+      <div id="login-error" class="login-error"></div>
+    </div>
+  </div>
+
+  <!-- 用户管理 -->
+  <div id="admin-view" class="hidden">
+    <div class="card page">
+      <div class="page-header">
+        <div class="page-title">
+          <span>用户管理</span>
+          <span id="user-count" class="count"></span>
+        </div>
+        <div class="header-right">
+          <span id="me-name" class="me-name"></span>
+          <button class="btn" onclick="logout()">退出</button>
+          <button class="btn primary" onclick="openCreate()">＋ 新建用户</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" id="user-table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th class="th-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="empty-tip" class="empty hidden">暂无用户</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建用户 -->
+  <div id="create-modal" class="modal-backdrop hidden" onmousedown="if(event.target===this)closeCreate()">
+    <div class="card modal">
+      <div class="modal-title">新建用户</div>
+      <label class="field">
+        <span class="field-label">用户名</span>
+        <input id="new-username" type="text" placeholder="2-32 个字符，不含空白" />
+      </label>
+      <label class="field">
+        <span class="field-label">初始密码</span>
+        <input id="new-password" type="text" placeholder="至少 6 个字符" />
+      </label>
+      <label class="field">
+        <span class="field-label">角色</span>
+        <select id="new-role">
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeCreate()">取消</button>
+        <button id="create-btn" class="btn primary" onclick="createUser()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 重置密码 -->
+  <div id="reset-modal" class="modal-backdrop hidden" onmousedown="if(event.target===this)closeReset()">
+    <div class="card modal">
+      <div class="modal-title">重置密码 — <span id="reset-name"></span></div>
+      <label class="field">
+        <span class="field-label">新密码</span>
+        <input id="reset-password" type="text" placeholder="至少 6 个字符" onkeydown="if(event.key==='Enter')submitReset()" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeReset()">取消</button>
+        <button class="btn primary" onclick="submitReset()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

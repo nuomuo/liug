@@ -2,19 +2,15 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getUserDb, deleteUserDbFile, ensureDefaultData, userDbPath } from './db.js';
+import { getUserDb, ensureDefaultData, userDbPath } from './db.js';
 import { importCsv } from './import-csv.js';
 import { getHolidays } from './holidays.js';
 import {
-  usersDb,
   bootstrapUsers,
   findUserById,
   findUserByUsername,
   verifyPassword,
   hashPassword,
-  listUsers,
-  createUser,
-  adminCount,
   publicUser,
   signSession,
   verifySessionToken,
@@ -127,12 +123,6 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// 管理员权限中间件（用于 /api/admin/*）
-function requireAdmin(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: '需要管理员权限' });
-  next();
-}
-
 // ---------- 认证 ----------
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -193,81 +183,6 @@ app.get('/api/holidays', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: '获取节假日数据失败：' + (e.message || '未知错误') });
   }
-});
-
-// ---------- 用户管理（仅管理员） ----------
-app.get('/api/admin/users', requireAdmin, (req, res) => {
-  res.json({ users: listUsers().map(publicUser) });
-});
-
-app.post('/api/admin/users', requireAdmin, (req, res) => {
-  const { username, password, role } = req.body || {};
-  if (typeof username !== 'string' || !/^[^\s]{2,32}$/.test(username)) {
-    return res.status(400).json({ error: '用户名需为 2-32 个字符且不含空白' });
-  }
-  if (typeof password !== 'string' || password.length < 6) {
-    return res.status(400).json({ error: '密码至少需要 6 个字符' });
-  }
-  if (findUserByUsername(username)) {
-    return res.status(400).json({ error: '用户名已存在' });
-  }
-  const user = createUser({ username, password, role });
-  getUserDb(user.id); // 立即创建该用户的独立数据库（建表 + 默认数据）
-  res.json({ user: publicUser(user) });
-});
-
-app.put('/api/admin/users/:id', requireAdmin, (req, res) => {
-  const target = findUserById(req.params.id);
-  if (!target) return res.status(404).json({ error: '用户不存在' });
-  const { username, password, role, disabled } = req.body || {};
-
-  // 不能取消最后一个管理员的身份或将其禁用
-  const demotingLastAdmin =
-    target.role === 'admin' &&
-    ((role !== undefined && role !== 'admin') || !!disabled) &&
-    adminCount() <= 1;
-  if (demotingLastAdmin) {
-    return res.status(400).json({ error: '不能禁用或降级系统中唯一的管理员' });
-  }
-
-  if (username !== undefined) {
-    if (typeof username !== 'string' || !/^[^\s]{2,32}$/.test(username)) {
-      return res.status(400).json({ error: '用户名需为 2-32 个字符且不含空白' });
-    }
-    const clash = findUserByUsername(username);
-    if (clash && clash.id !== target.id) {
-      return res.status(400).json({ error: '用户名已存在' });
-    }
-    usersDb.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, target.id);
-  }
-  if (password !== undefined) {
-    if (typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: '密码至少需要 6 个字符' });
-    }
-    usersDb.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), target.id);
-    revokeAllSessions(target.id); // 重置密码后该用户所有会话下线
-  }
-  if (role !== undefined) {
-    usersDb.prepare("UPDATE users SET role = ? WHERE id = ?").run(role === 'admin' ? 'admin' : 'user', target.id);
-  }
-  if (disabled !== undefined) {
-    usersDb.prepare('UPDATE users SET disabled = ? WHERE id = ?').run(disabled ? 1 : 0, target.id);
-  }
-  res.json({ user: publicUser(findUserById(target.id)) });
-});
-
-app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
-  const target = findUserById(req.params.id);
-  if (!target) return res.status(404).json({ error: '用户不存在' });
-  if (target.id === req.user.id) {
-    return res.status(400).json({ error: '不能删除当前登录的账户' });
-  }
-  if (target.role === 'admin' && adminCount() <= 1) {
-    return res.status(400).json({ error: '不能删除系统中唯一的管理员' });
-  }
-  usersDb.prepare('DELETE FROM users WHERE id = ?').run(target.id);
-  deleteUserDbFile(target.id); // 同时删除该用户的独立数据文件
-  res.json({ ok: true });
 });
 
 // ---------- bootstrap ----------

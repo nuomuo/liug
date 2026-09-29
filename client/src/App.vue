@@ -13,7 +13,6 @@ import TaskDetail from './components/TaskDetail.vue';
 import SearchOverlay from './components/SearchOverlay.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import LoginPage from './components/LoginPage.vue';
-import AdminPage from './components/AdminPage.vue';
 
 const viewComponent = computed(() => {
   switch (store.view) {
@@ -22,7 +21,6 @@ const viewComponent = computed(() => {
     case 'focus': return FocusPage;
     case 'countdown': return CountdownPage;
     case 'habit': return PlaceholderPage;
-    case 'admin': return AdminPage;
     default: return CalendarPage;
   }
 });

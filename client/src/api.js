@@ -34,12 +34,6 @@ export const api = {
   changePassword: (oldPassword, newPassword) =>
     req('POST', '/api/auth/change-password', { oldPassword, newPassword }),
 
-  // 用户管理（管理员）
-  listUsers: () => req('GET', '/api/admin/users'),
-  createUser: (u) => req('POST', '/api/admin/users', u),
-  updateUser: (id, patch) => req('PUT', `/api/admin/users/${id}`, patch),
-  deleteUser: (id) => req('DELETE', `/api/admin/users/${id}`),
-
   // 官方节假日安排（含调休），year 为年份
   getHolidays: (year) => req('GET', '/api/holidays?year=' + year),
 

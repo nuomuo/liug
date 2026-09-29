@@ -7,8 +7,8 @@ const railItems = [
   { key: 'calendar', icon: 'calendar-sidebar', label: '日历' },
   { key: 'list', icon: 'list-sidebar', label: '任务' },
   { key: 'matrix', icon: 'matrix-sidebar', label: '四象限' },
-  { key: 'focus', icon: 'sidebar-focus-sidebar', label: '专注' },
-  { key: 'habit', icon: 'habit-sidebar', label: '习惯' },
+  // { key: 'focus', icon: 'sidebar-focus-sidebar', label: '专注' },
+  // { key: 'habit', icon: 'habit-sidebar', label: '习惯' },
   { key: 'countdown', icon: 'countdown-sidebar', label: '倒数日' },
 ];
 
@@ -20,9 +20,6 @@ function go(item) {
 }
 function openSearch() {
   store.searchOpen = true;
-}
-function goAdmin() {
-  store.view = 'admin';
 }
 async function doLogout() {
   await logout();
@@ -49,15 +46,6 @@ async function doLogout() {
       </div>
       <div class="rail-item" title="搜索 (Ctrl+K)" @click="openSearch">
         <Icon name="search-sidebar" :size="24" />
-      </div>
-      <div
-        v-if="store.user?.role === 'admin'"
-        class="rail-item"
-        :class="{ active: store.view === 'admin' }"
-        title="用户管理"
-        @click="goAdmin"
-      >
-        <Icon name="user-icon" :size="24" />
       </div>
     </div>
 

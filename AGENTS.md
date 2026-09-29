@@ -37,3 +37,13 @@ DIDA_DB_PATH=data/schedule.test.db node server/import-csv.js <csv路径>
   - 新增功能若包含可复用的 UI/交互（编辑器、选择器、弹层、菜单等），必须先抽成独立组件再接入页面，而不是把逻辑写死在某个页面组件里。
   - 通用组件必须自包含：不依赖特定页面的数据/store 字段，通过 `props` / `emits`（`v-model`）通信，样式（含玻璃风格变量）随组件走。
   - 弹层类组件统一用 `<Teleport to="body">` + `store.js` 的 `placeDropdown()` 定位，保证跨页面行为一致。
+
+## 系统管理独立程序（system-admin/）
+
+用户管理已从主应用独立为 Python Flask 程序（前后端分离：`/system/*` JSON API + `web/` 纯静态前端，无模板渲染）：
+
+- 端口约定：主应用 `4300`、Node 测试 `4301`、system-admin 生产 `4302`、system-admin 测试 `4303`。
+- 启动：`python system-admin/app.py`（依赖见 `system-admin/requirements.txt`）。
+- 测试：`DIDA_USERS_DB_PATH=data/users.test.db DIDA_USERS_DIR=data/users-test PORT=4303 python system-admin/app.py` —— 数据库隔离规则同样适用。
+- 与主程序共享用户主库；密码哈希（scrypt）与会话失效（`sessions_since`）口径与 `server/users.js` 保持互通。
+- 主应用（Node server 与 Vue client）不再包含任何用户管理代码；用户管理一律在本程序进行。

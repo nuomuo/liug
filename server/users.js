@@ -122,13 +122,7 @@ export function revokeAllSessions(userId) {
   usersDb.prepare('UPDATE users SET sessions_since = ? WHERE id = ?').run(Date.now(), userId);
 }
 
-// ---------- 用户 CRUD ----------
-export function listUsers() {
-  return usersDb
-    .prepare('SELECT id, username, role, disabled, created_at FROM users ORDER BY created_at, username')
-    .all();
-}
-
+// ---------- 用户查询 ----------
 export function findUserByUsername(username) {
   return usersDb.prepare('SELECT * FROM users WHERE username = ?').get(String(username || ''));
 }
@@ -137,16 +131,12 @@ export function findUserById(id) {
   return usersDb.prepare('SELECT * FROM users WHERE id = ?').get(String(id || ''));
 }
 
-export function createUser({ username, password, role = 'user' }) {
+function createUser({ username, password, role = 'user' }) {
   const id = crypto.randomUUID();
   usersDb
     .prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?,?,?,?)')
     .run(id, String(username), hashPassword(password), role === 'admin' ? 'admin' : 'user');
   return findUserById(id);
-}
-
-export function adminCount() {
-  return usersDb.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0").get().n;
 }
 
 export function publicUser(u) {
