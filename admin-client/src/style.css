@@ -1,4 +1,4 @@
-/* 系统管理独立前端 —— 与主应用一致的浅色玻璃风格 */
+/* 系统管理前端 —— 与主应用一致的浅色玻璃风格（由原 server/web_admin/style.css 迁移） */
 * {
   margin: 0;
   padding: 0;
@@ -22,9 +22,6 @@ body {
     radial-gradient(900px 600px at 18% 12%, rgba(71, 114, 250, 0.16), transparent 60%),
     radial-gradient(800px 500px at 85% 85%, rgba(250, 168, 12, 0.14), transparent 60%),
     linear-gradient(160deg, #dfe6f5, #eef1f7 45%, #e3e9f2);
-}
-.hidden {
-  display: none !important;
 }
 
 /* 玻璃卡片 */
@@ -148,7 +145,7 @@ body {
 }
 
 /* ---------- 管理页 ---------- */
-#admin-view {
+.admin-view {
   min-height: 100vh;
   padding: 26px;
 }

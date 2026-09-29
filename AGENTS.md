@@ -2,7 +2,8 @@
 
 ## 架构说明（前后端分离）
 
-- 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*`（主应用）与 `/system/*`（用户管理）JSON API，并托管 `client/dist`（主应用前端）与 `server/web_admin/`（用户管理前端）两个静态站点。依赖见 `server/requirements.txt`。
+- 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*`（主应用）与 `/system/*`（用户管理）JSON API，并托管 `client/dist`（主应用前端）与 `admin-client/dist`（用户管理前端）两个静态站点。依赖见 `server/requirements.txt`。
+- 用户管理前端为独立 Vue3 程序 `admin-client/`（开发端口 5181，`/system` 代理到 4300，生产托管在 `/system-admin/` 子路径，构建需 `base: '/system-admin/'`）。
 - 前端为 Vue3 + Vite（`client/`），构建产物在 `client/dist/`；前端改动后需 `npm run build --prefix client`。
 - 多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。
 - 密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`，管理端独立密钥为 `data/users.db.system-secret`。

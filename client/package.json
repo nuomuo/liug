@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "description": "清单日历 —— 模仿滴答清单网页版的日程管理应用（Vue3 + FastAPI + SQLite，前后端分离）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "python ../server/app.py",
+    "start": "python ../server/app.py",
+    "import": "python ../server/import_csv.py"
   },
   "dependencies": {
     "lunar-javascript": "^1.7.3",

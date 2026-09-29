@@ -3,7 +3,7 @@
 一个进程同时提供：
 - /api/*      业务接口（对应原 server/index.js）
 - /system/*   用户管理接口（由原 system-admin Flask 程序合并而来）
-- /system-admin/  用户管理静态前端（web_admin/）
+- /system-admin/  用户管理静态前端（admin-client/dist，Vue3 独立程序）
 - 其余 GET    Vue 客户端静态托管（client/dist）+ SPA fallback
 
 启动：python app.py（生产端口 4300；测试 PORT=4301 + 重定向用户库环境变量）
@@ -49,7 +49,7 @@ def system_admin_redirect():
     return RedirectResponse('/system-admin/')
 
 
-app.mount('/system-admin', StaticFiles(directory=BASE_DIR / 'web_admin', html=True), name='system-admin')
+app.mount('/system-admin', StaticFiles(directory=BASE_DIR.parent / 'admin-client' / 'dist', html=True), name='system-admin')
 
 
 @app.get('/{full_path:path}', include_in_schema=False)
