@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import {
   store,
   getProject,
@@ -13,6 +13,9 @@ import {
   placeDropdown,
 } from '../store.js';
 import Icon from './Icon.vue';
+import { marked } from 'marked';
+
+marked.setOptions({ gfm: true, breaks: true });
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -173,6 +176,113 @@ function onTagBlur() {
   setTimeout(() => (tagMenuOpen.value = false), 150);
 }
 
+// ---------- 备注 Markdown：实时预览 + 右键格式化 ----------
+const contentEl = ref(null);
+const livePreview = ref(true);
+const ctxMenu = ref(null);
+// 本地同步镜像：输入即时渲染预览，不等保存回包
+const contentMirror = ref(props.task.content);
+watch(() => props.task.id, () => (contentMirror.value = props.task.content));
+const renderedHtml = computed(() => marked.parse(contentMirror.value || ''));
+
+function onContentInput(e) {
+  contentMirror.value = e.target.value;
+  updateTaskLocal(props.task, { content: e.target.value });
+}
+
+// 编辑区 / 预览区左右分栏，分割条可拖动调节宽度占比
+const rowSplit = computed(() => livePreview.value && !!contentMirror.value);
+const splitRowEl = ref(null);
+const editorRatio = ref(0.5); // 编辑区宽度占比（0.2 ~ 0.8）
+let splitting = false;
+function beginSplit(e) {
+  if (e.button !== 0) return;
+  splitting = true;
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+  document.addEventListener('mousemove', onSplitMove);
+  document.addEventListener('mouseup', endSplit);
+}
+function onSplitMove(e) {
+  if (!splitting || !splitRowEl.value) return;
+  const r = splitRowEl.value.getBoundingClientRect();
+  editorRatio.value = Math.min(0.8, Math.max(0.2, (e.clientX - r.left) / r.width));
+}
+function endSplit() {
+  splitting = false;
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', onSplitMove);
+  document.removeEventListener('mouseup', endSplit);
+}
+onBeforeUnmount(endSplit);
+
+function openContentMenu(e) {
+  ctxMenu.value = { x: e.clientX, y: e.clientY };
+}
+function closeContentMenu() {
+  ctxMenu.value = null;
+}
+const ctxStyle = computed(() => {
+  const m = ctxMenu.value;
+  if (!m) return {};
+  return {
+    left: Math.max(8, Math.min(m.x, window.innerWidth - 180)) + 'px',
+    top: Math.max(8, Math.min(m.y, window.innerHeight - 460)) + 'px',
+  };
+});
+
+// 选区包裹式格式化（无选区时插入占位文本）
+function wrapSel(before, after = before, placeholder = '文本') {
+  closeContentMenu();
+  const el = contentEl.value;
+  const s = el.selectionStart;
+  const e = el.selectionEnd;
+  const v = el.value;
+  const inner = v.slice(s, e) || placeholder;
+  const nv = v.slice(0, s) + before + inner + after + v.slice(e);
+  el.value = nv;
+  contentMirror.value = nv;
+  el.focus();
+  el.setSelectionRange(s + before.length, s + before.length + inner.length);
+  updateTaskLocal(props.task, { content: nv });
+}
+// 行前缀式格式化（再次应用会替换掉已有前缀）
+function prefixLine(prefix) {
+  closeContentMenu();
+  const el = contentEl.value;
+  const v = el.value;
+  const s = el.selectionStart;
+  const e = el.selectionEnd;
+  const ls = v.lastIndexOf('\n', s - 1) + 1;
+  let le = v.indexOf('\n', e);
+  if (le === -1) le = v.length;
+  const body = v.slice(ls, le).replace(/^(#{1,6}\s+|>\s?|[-*]\s+|\d+\.\s+)/, '');
+  const nv = v.slice(0, ls) + prefix + body + v.slice(le);
+  el.value = nv;
+  contentMirror.value = nv;
+  el.focus();
+  el.setSelectionRange(ls + prefix.length + body.length, ls + prefix.length + body.length);
+  updateTaskLocal(props.task, { content: nv });
+}
+
+const ctxItems = [
+  { label: '加粗', hint: '**', run: () => wrapSel('**') },
+  { label: '斜体', hint: '*', run: () => wrapSel('*') },
+  { label: '下划线', hint: '<u>', run: () => wrapSel('<u>', '</u>') },
+  { label: '删除线', hint: '~~', run: () => wrapSel('~~') },
+  { label: '高亮', hint: '<mark>', run: () => wrapSel('<mark>', '</mark>', '重点') },
+  { label: '红色', dot: '#e13e39', run: () => wrapSel('<span style="color:#e13e39">', '</span>') },
+  { label: '橙色', dot: '#faa80c', run: () => wrapSel('<span style="color:#faa80c">', '</span>') },
+  { label: '蓝色', dot: '#4772fa', run: () => wrapSel('<span style="color:#4772fa">', '</span>', '文字') },
+  { label: '代码', hint: '`', run: () => wrapSel('`') },
+  { label: '链接', hint: '[]()', run: () => wrapSel('[', '](https://)', '链接文字') },
+  { sep: true },
+  { label: '标题', hint: '##', run: () => prefixLine('## ') },
+  { label: '无序列表', hint: '-', run: () => prefixLine('- ') },
+  { label: '有序列表', hint: '1.', run: () => prefixLine('1. ') },
+  { label: '引用', hint: '>', run: () => prefixLine('> ') },
+];
+
 function close() {
   closeTaskDetail();
 }
@@ -196,6 +306,9 @@ const completedLabel = computed(() => {
 // ---------- 就地弹层定位 ----------
 const PANEL_W = 380;
 const PANEL_MAX_H = Math.min(560, Math.round(window.innerHeight * 0.72));
+const panelEl = ref(null);
+// 拖动 / 缩放后的自定义位置与尺寸（null = 未自定义，按锚点定位）
+const custom = ref(null);
 const panelStyle = computed(() => {
   const a = store.detailAnchor;
   // 坐标非法时兜底：视口居中偏上
@@ -205,14 +318,83 @@ const panelStyle = computed(() => {
   let top = y - 16;
   if (left + PANEL_W > window.innerWidth - 12) left = Math.max(12, x - PANEL_W - 10);
   if (top + PANEL_MAX_H > window.innerHeight - 12) top = Math.max(12, y - PANEL_MAX_H - 10);
-  return { left: left + 'px', top: top + 'px', width: PANEL_W + 'px', maxHeight: PANEL_MAX_H + 'px' };
+  const style = { left: left + 'px', top: top + 'px', width: PANEL_W + 'px', maxHeight: PANEL_MAX_H + 'px' };
+  if (custom.value) {
+    style.left = custom.value.left + 'px';
+    style.top = custom.value.top + 'px';
+    if (custom.value.width != null) style.width = custom.value.width + 'px';
+    if (custom.value.height != null) {
+      style.height = custom.value.height + 'px';
+      style.maxHeight = custom.value.height + 'px';
+    }
+  }
+  return style;
 });
+
+// ---------- 弹窗拖动（标题行） / 边缘缩放 ----------
+const MIN_W = 320;
+const MIN_H = 220;
+const EDGE = 8; // 距视口边缘最小留白
+let drag = null;
+
+function beginDrag(mode, e) {
+  if (e.button !== 0) return;
+  const r = panelEl.value.getBoundingClientRect();
+  if (!custom.value) custom.value = { left: r.left, top: r.top };
+  tagMenuOpen.value = false; // fixed 定位的标签下拉不随面板移动，拖动时先收起
+  drag = { mode, x: e.clientX, y: e.clientY, rect: r };
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', endDrag);
+}
+function startMove(e) {
+  if (e.target.closest('.td-close, .td-action')) return;
+  beginDrag('move', e);
+}
+function onDragMove(e) {
+  if (!drag) return;
+  const { mode, x, y, rect } = drag;
+  const dx = e.clientX - x;
+  const dy = e.clientY - y;
+  if (mode === 'move') {
+    const left = Math.min(Math.max(EDGE, rect.left + dx), window.innerWidth - EDGE - rect.width);
+    const top = Math.min(Math.max(EDGE, rect.top + dy), window.innerHeight - EDGE - rect.height);
+    custom.value = { ...custom.value, left, top };
+    return;
+  }
+  let left = custom.value.left;
+  let top = custom.value.top;
+  let width = rect.width;
+  let height = rect.height;
+  if (mode.includes('e')) width = Math.max(MIN_W, Math.min(rect.width + dx, window.innerWidth - EDGE - rect.left));
+  if (mode.includes('w')) {
+    width = Math.max(MIN_W, Math.min(rect.width - dx, rect.right - EDGE));
+    left = rect.right - width;
+  }
+  if (mode.includes('s')) height = Math.max(MIN_H, Math.min(rect.height + dy, window.innerHeight - EDGE - rect.top));
+  if (mode.includes('n')) {
+    height = Math.max(MIN_H, Math.min(rect.height - dy, rect.bottom - EDGE));
+    top = rect.bottom - height;
+  }
+  const patch = { left, top, width };
+  // 只有上下边缘参与缩放时才固定高度；否则保持内容自适应
+  if (mode.includes('n') || mode.includes('s')) patch.height = height;
+  custom.value = { ...custom.value, ...patch };
+}
+function endDrag() {
+  drag = null;
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', endDrag);
+}
+onBeforeUnmount(endDrag);
 </script>
 
 <template>
   <div class="td-backdrop" @mousedown.self="close" @contextmenu.prevent>
-    <div class="task-detail" :style="panelStyle" @mousedown.stop>
-      <div class="td-header-row">
+    <div ref="panelEl" class="task-detail" :style="panelStyle" @mousedown.stop>
+      <div class="td-header-row" @mousedown="startMove">
         <Icon name="panel-close" :size="16" class="td-close" @click="close" />
         <div class="td-actions">
           <span class="td-action" title="删除任务" @click="remove"><Icon name="delete" :size="15" /></span>
@@ -326,13 +508,26 @@ const panelStyle = computed(() => {
           </div>
         </div>
 
-        <!-- 备注 -->
-        <textarea
-          class="td-content"
-          :value="task.content"
-          placeholder="备注…"
-          @change="updateTaskLocal(task, { content: $event.target.value })"
-        ></textarea>
+        <!-- 备注（Markdown：左右分栏实时预览，分割条可拖动调宽） -->
+        <div class="td-content-bar">
+          <span class="td-content-switch" :class="{ on: livePreview }" @click="livePreview = !livePreview">实时预览</span>
+        </div>
+        <div ref="splitRowEl" class="td-content-row" :class="{ split: rowSplit }">
+          <textarea
+            ref="contentEl"
+            class="td-content"
+            :class="{ compact: livePreview && !rowSplit }"
+            :style="rowSplit ? { width: `calc(${editorRatio * 100}% - 5px)` } : null"
+            :value="task.content"
+            placeholder="备注…（支持 Markdown，选中文本右键可快捷格式化）"
+            @input="onContentInput"
+            @contextmenu.prevent="openContentMenu"
+          ></textarea>
+          <template v-if="rowSplit">
+            <div class="td-content-splitter" title="拖动调节宽度" @mousedown="beginSplit"></div>
+            <div class="td-content-preview" v-html="renderedHtml"></div>
+          </template>
+        </div>
 
         <!-- 子任务 -->
         <div class="td-subtasks">
@@ -360,7 +555,33 @@ const panelStyle = computed(() => {
           <span v-if="completedLabel">{{ completedLabel }}</span>
         </div>
       </div>
+
+      <!-- 边缘缩放手柄（置于面板内侧，避免被 overflow: hidden 裁剪） -->
+      <span
+        v-for="d in ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']"
+        :key="d"
+        class="td-rz"
+        :class="'td-rz-' + d"
+        @mousedown="beginDrag(d, $event)"
+      ></span>
     </div>
+
+    <!-- Markdown 右键格式化菜单（Teleport 出面板，避免被裁剪/受层叠上下文影响） -->
+    <Teleport to="body">
+      <template v-if="ctxMenu">
+        <div class="ctx-backdrop" @mousedown="closeContentMenu" @contextmenu.prevent="closeContentMenu"></div>
+        <div class="ctx-menu" :style="ctxStyle" @contextmenu.prevent>
+          <template v-for="(it, i) in ctxItems" :key="i">
+            <div v-if="it.sep" class="ctx-sep"></div>
+            <div v-else class="ctx-item" @mousedown.prevent="it.run()">
+              <span v-if="it.dot" class="ctx-dot" :style="{ background: it.dot }"></span>
+              <span class="ctx-label">{{ it.label }}</span>
+              <span v-if="it.hint" class="ctx-hint">{{ it.hint }}</span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </Teleport>
   </div>
 </template>
 
@@ -395,7 +616,21 @@ const panelStyle = computed(() => {
   align-items: center;
   padding: 8px 12px 2px;
   flex: none;
+  cursor: move;
 }
+/* 边缘缩放手柄 */
+.td-rz {
+  position: absolute;
+  z-index: 20;
+}
+.td-rz-n { top: 0; left: 10px; right: 10px; height: 5px; cursor: ns-resize; }
+.td-rz-s { bottom: 0; left: 10px; right: 10px; height: 5px; cursor: ns-resize; }
+.td-rz-e { right: 0; top: 10px; bottom: 10px; width: 5px; cursor: ew-resize; }
+.td-rz-w { left: 0; top: 10px; bottom: 10px; width: 5px; cursor: ew-resize; }
+.td-rz-ne { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.td-rz-nw { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.td-rz-se { bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.td-rz-sw { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
 .td-close {
   cursor: pointer;
   color: var(--grey-40);
@@ -672,6 +907,158 @@ const panelStyle = computed(() => {
 }
 .td-content:focus {
   border-color: var(--primary-color);
+}
+
+/* 备注 Markdown：预览开关 + 渲染排版 */
+.td-content-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.td-content-switch {
+  font-size: 12px;
+  color: var(--grey-40);
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 999px;
+  transition: all 0.2s var(--ease-spring);
+}
+.td-content-switch:hover {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.5);
+}
+.td-content-switch.on {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.55);
+}
+/* 实时预览开启时压缩编辑区，把空间留给渲染效果 */
+.td-content.compact {
+  min-height: 48px;
+}
+/* 左右分栏：编辑区 | 分割条 | 预览区 */
+.td-content-row.split {
+  display: flex;
+  align-items: stretch;
+}
+.td-content-row.split .td-content {
+  flex: none;
+  height: 170px;
+  min-height: 170px;
+}
+.td-content-row.split .td-content-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 170px;
+  max-height: none;
+}
+.td-content-splitter {
+  flex: none;
+  width: 3px;
+  margin: 0 1px;
+  border-radius: 2px;
+  cursor: col-resize;
+  background: var(--grey-20);
+  transition: background 0.15s var(--ease-spring);
+}
+.td-content-splitter:hover {
+  background: color-mix(in srgb, var(--primary-color) 25%, transparent);
+}
+.td-content-preview {
+  min-height: 40px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--grey-80);
+  word-break: break-word;
+}
+.td-content-preview :deep(p) { margin: 0 0 6px; }
+.td-content-preview :deep(p:last-child) { margin-bottom: 0; }
+.td-content-preview :deep(h1),
+.td-content-preview :deep(h2),
+.td-content-preview :deep(h3),
+.td-content-preview :deep(h4) { margin: 8px 0 4px; line-height: 1.35; }
+.td-content-preview :deep(h1) { font-size: 17px; }
+.td-content-preview :deep(h2) { font-size: 16px; }
+.td-content-preview :deep(h3) { font-size: 14.5px; }
+.td-content-preview :deep(h4) { font-size: 13.5px; }
+.td-content-preview :deep(ul),
+.td-content-preview :deep(ol) { margin: 0 0 6px; padding-left: 20px; }
+.td-content-preview :deep(li) { margin: 2px 0; }
+.td-content-preview :deep(code) {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+.td-content-preview :deep(pre) {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  margin: 0 0 6px;
+}
+.td-content-preview :deep(pre code) { background: none; padding: 0; }
+.td-content-preview :deep(blockquote) {
+  margin: 0 0 6px;
+  padding: 2px 10px;
+  border-left: 3px solid var(--grey-20);
+  color: var(--grey-60);
+}
+.td-content-preview :deep(mark) { background: #ffe58a; border-radius: 2px; padding: 0 2px; }
+.td-content-preview :deep(a) { color: var(--primary-color); }
+.td-content-preview :deep(del) { color: var(--grey-40); }
+.td-content-preview :deep(hr) { border: none; border-top: 1px solid var(--grey-13); margin: 8px 0; }
+
+/* Markdown 右键格式化菜单 */
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1490;
+}
+.ctx-menu {
+  position: fixed;
+  z-index: 1500;
+  min-width: 160px;
+  padding: 5px 0;
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow-float);
+  animation: td-pop-in 0.18s var(--ease-spring);
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--grey-80);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-spring);
+}
+.ctx-item:hover { background: var(--grey-5); }
+.ctx-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.ctx-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--grey-30);
+}
+.ctx-sep {
+  height: 1px;
+  background: var(--grey-5);
+  margin: 4px 8px;
 }
 
 .td-subtasks {

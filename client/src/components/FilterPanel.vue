@@ -148,7 +148,7 @@ async function removeProject() {
       </span>
     </div>
 
-    <div class="filter-list">
+    <div class="filter-list with-no-scroll">
       <!-- 清单 -->
       <div class="group-header">
         <span class="group-label" @click="collapsed.list = !collapsed.list">
