@@ -16,14 +16,13 @@ import uvicorn
 
 # PyInstaller 冻结模式（quadrant.exe）：
 # - 数据目录默认放在 exe 同级 data/ 下（可用 DIDA_USERS_DB_PATH / DIDA_USERS_DIR 覆盖）
-# - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 与 admin-client/dist 副本
+# - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
     os.environ.setdefault('DIDA_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
     os.environ.setdefault('DIDA_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
     os.environ.setdefault('DIDA_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
-    os.environ.setdefault('DIDA_ADMIN_DIST_DIR', str(_MEIPASS / 'admin-client' / 'dist'))
 else:
     _EXE_DIR = None
 

@@ -8,7 +8,6 @@ from pathlib import Path
 
 datas = [
     ('client/dist', 'client/dist'),
-    ('admin-client/dist', 'admin-client/dist'),
 ]
 binaries = []
 # conda Python 的运行时依赖 DLL 在 Library/bin，PyInstaller 不会自动打包（否则 _ssl/_ctypes/_sqlite3 等导入失败）

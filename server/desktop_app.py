@@ -1,7 +1,7 @@
 """流光 LIUG 桌面版启动器（系统托盘 + 主界面窗口 + 可选桌面四象限小组件）
 
 一个进程搞定全部：
-- 内嵌 uvicorn 服务（优先 4300，被占用则自动换随机端口），托管主应用/管理端前端与 API；
+- 内嵌 uvicorn 服务（优先 4300，被占用则自动换随机端口），托管主应用前端与 API；
 - 系统托盘常驻（pystray）：双击图标或菜单「打开流光 LIUG」显示主窗口，右键菜单可开关
   「桌面小组件（四象限）」，「退出」彻底结束进程；
 - 主窗口点 × 仅隐藏到托盘（托盘应用惯例），从托盘「退出」才真正退出；
@@ -23,14 +23,13 @@ import uvicorn
 
 # PyInstaller 冻结模式（liug.exe）：
 # - 数据目录默认放在 exe 同级 data/ 下（可用 DIDA_USERS_DB_PATH / DIDA_USERS_DIR 覆盖）
-# - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 与 admin-client/dist 副本
+# - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
     os.environ.setdefault('DIDA_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
     os.environ.setdefault('DIDA_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
     os.environ.setdefault('DIDA_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
-    os.environ.setdefault('DIDA_ADMIN_DIST_DIR', str(_MEIPASS / 'admin-client' / 'dist'))
     # 无控制台模式（console=False）下 sys.stdout/stderr 为 None，
     # pythonnet/clr_loader 初始化或日志写入会因 None 崩溃导致进程静默退出——必须替换掉
     if sys.stdout is None:

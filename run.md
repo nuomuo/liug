@@ -9,14 +9,13 @@ npm 相关内容已全部收进 `client/package.json`，项目根目录不再有
 # 1. 安装后端依赖（fastapi / uvicorn / httpx / regex）
 pip install -r server/requirements.txt
 
-# 2. 安装前端依赖（主应用 + 用户管理前端）
+# 2. 安装前端依赖（主应用）
 npm install --prefix client
-npm install --prefix admin-client
 ```
 
 ## 二、启动后端（必须）
 
-后端同时提供 API 并托管前端构建产物和用户管理页，**日常使用只需启动它**：
+后端同时提供 API 并托管前端构建产物，**日常使用只需启动它**：
 
 ```powershell
 # 在项目根目录执行
@@ -26,7 +25,6 @@ npm run server --prefix client
 ```
 
 - 主应用：[http://localhost:4300](http://localhost:4300)
-- 用户管理页：[http://localhost:4300/system-admin/](http://localhost:4300/system-admin/)（仅管理员）
 
 ## 三、启动前端
 
@@ -50,17 +48,6 @@ npm run build --prefix client
 
 构建产物输出到 `client/dist/`，刷新 [http://localhost:4300](http://localhost:4300) 即生效。
 
-### 用户管理前端（admin-client/，独立 Vue3 程序）
-
-```powershell
-# 开发模式（热更新，/system 代理到 4300）
-npm run dev --prefix admin-client
-# 访问 http://localhost:5181/system-admin/
-
-# 构建发布（产物 admin-client/dist/，由后端托管在 /system-admin/）
-npm run build --prefix admin-client
-```
-
 ## 四、桌面四象限小组件（可选）
 
 pywebview 无边框透明置顶窗口，加载主应用的 `/quadrant` 页面（需先执行过 `npm run build --prefix client`）：
@@ -83,7 +70,7 @@ python -m PyInstaller --noconfirm quadrant.spec
 # 产物：dist/quadrant.exe（约 38 MB，单文件、无控制台窗口，双击即用）
 ```
 
-- 已打包 `client/dist` + `admin-client/dist` 静态资源；主服务运行时复用 4300，否则内嵌服务独立运行
+- 已打包 `client/dist` 静态资源；主服务运行时复用 4300，否则内嵌服务独立运行
 - 独立运行时数据放在 exe 同级 `data/` 目录（与源码运行的 `data/` 互不干扰；也可用 `DIDA_USERS_DB_PATH`/`DIDA_USERS_DIR` 覆盖）
 - 注意：spec 中打包了 conda `Library/bin` 下的 OpenSSL/libffi/sqlite3 等运行时 DLL，换 Python 环境构建时需确认该目录仍存在
 
@@ -98,7 +85,7 @@ python server/desktop_app.py
 # 测试库运行
 $env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; python server/desktop_app.py
 
-# 打包成单个 exe（需先 build 过 client 与 admin-client）
+# 打包成单个 exe（需先 build 过 client）
 pip install pyinstaller pystray pillow
 python -m PyInstaller --noconfirm liug.spec
 # 产物：dist/liug.exe（约 42 MB，单文件、无控制台窗口，双击即用）
@@ -109,7 +96,7 @@ python -m PyInstaller --noconfirm liug.spec
 - **单实例**：Windows 互斥体锁，重复双击弹提示「已在运行」
 - **端口**：内嵌服务优先 4300，被其他程序占用时自动换随机端口（对用户透明）
 - **数据与日志**：数据目录在 exe 同级 `data/`；运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`（排查 exe 问题先看这两个文件）
-- 首次启动自动创建默认管理员 `admin / admin123`，登录后可在 `/system-admin/` 修改
+- 首次启动自动创建默认管理员 `admin / admin123`
 - **登录持久化**：WebView2 以非隐私模式运行（`private_mode=False`），cookies/localStorage 落在 exe 同级 `data/webview/`，重启 exe 免登录（除非手动退出登录）；服务端会话有效期 7 天
 - **桌面小组件**（无边框透明窗口，`/quadrant` 页面）：
   - 未登录：显示「请先登录」提示卡，点击打开主界面窗口登录；主界面登录成功后小组件**立即**刷新（storage 事件 `liug-sync` 打点，30s 轮询仅兜底）
@@ -125,7 +112,7 @@ python -m PyInstaller --noconfirm liug.spec
 ```powershell
 # 主应用测试服务器（4301，首次启动自动创建测试管理员 admin / admin123）
 $env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
-# 访问 http://localhost:4301，用户管理页 http://localhost:4301/system-admin/
+# 访问 http://localhost:4301
 
 # 导入滴答清单备份 CSV 到测试库
 $env:DIDA_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路径>

@@ -2,8 +2,7 @@
 
 - 密码：scrypt$<hex盐>$<hex哈希>，与 Node crypto.scryptSync 互通（盐为 hex 字符串直接作 bytes）
 - 会话：HMAC-SHA256 签名的 base64url 无状态令牌 + revoked_sessions 吊销表 + sessions_since 批量失效
-- 会话密钥：主应用复用 <用户主库>.secret（沿用旧 Node 后端密钥文件，已有登录态迁移后不失效）；
-  系统管理端用 <用户主库>.system-secret（沿用原 system-admin），Cookie 名互相独立
+- 会话密钥：主应用复用 <用户主库>.secret（沿用旧 Node 后端密钥文件，已有登录态迁移后不失效）
 """
 import base64
 import hashlib
@@ -25,7 +24,6 @@ DATA_DIR = BASE_DIR.parent / 'data'
 USERS_DB_PATH = Path(os.environ.get('DIDA_USERS_DB_PATH') or (DATA_DIR / 'users.db')).resolve()
 
 SESSION_COOKIE = 'dida_session'
-SYSTEM_SESSION_COOKIE = 'dida_system_session'
 SESSION_TTL = 7 * 24 * 3600  # 7 天（秒）
 SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_DKLEN = 16384, 8, 1, 64  # 与 Node crypto.scryptSync 默认参数一致
 
@@ -107,8 +105,6 @@ def _load_secret(suffix):
 
 # 主应用会话密钥：与旧 Node 后端共用同一文件（users.db.secret），保证已有登录态不失效
 SECRET = _load_secret('.secret')
-# 系统管理端会话密钥：沿用原 system-admin 独立密钥，与主应用会话互相隔离
-SYSTEM_SECRET = _load_secret('.system-secret')
 
 
 def _base64url(data):

@@ -2,8 +2,6 @@
 
 一个进程同时提供：
 - /api/*      业务接口（对应原 server/index.js）
-- /system/*   用户管理接口（由原 system-admin Flask 程序合并而来）
-- /system-admin/  用户管理静态前端（admin-client/dist，Vue3 独立程序）
 - 其余 GET    Vue 客户端静态托管（client/dist）+ SPA fallback
 
 启动：python app.py（生产端口 4300；测试 PORT=4301 + 重定向用户库环境变量）
@@ -14,18 +12,15 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 import users
 from errors import ApiError
 from routes_api import router as api_router
-from routes_system import router as system_router
 
 BASE_DIR = Path(__file__).resolve().parent
 # 静态资源目录：可用环境变量覆盖（quadrant.exe 冻结模式下指向 PyInstaller 解包目录 _MEIPASS 内的副本）
 DIST_DIR = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
-ADMIN_DIST_DIR = Path(os.environ.get('DIDA_ADMIN_DIST_DIR') or (BASE_DIR.parent / 'admin-client' / 'dist'))
 PORT = int(os.environ.get('PORT') or '4300')
 
 # redirect_slashes=False：对齐 Express（/api/tasks/ 不做 307 重定向）
@@ -43,21 +38,12 @@ async def api_error_handler(request: Request, exc: ApiError):
 
 
 app.include_router(api_router)
-app.include_router(system_router)
-
-
-@app.get('/system-admin', include_in_schema=False)
-def system_admin_redirect():
-    return RedirectResponse('/system-admin/')
-
-
-app.mount('/system-admin', StaticFiles(directory=ADMIN_DIST_DIR, html=True), name='system-admin')
 
 
 @app.get('/{full_path:path}', include_in_schema=False)
 def spa_fallback(full_path: str):
-    """对齐 Express：express.static(dist) + 非 /api/* 一律回退 index.html（含 /system/* 排除）"""
-    if full_path.startswith(('api/', 'system/')):
+    """对齐 Express：express.static(dist) + 非 /api/* 一律回退 index.html"""
+    if full_path.startswith('api/'):
         raise ApiError(404, 'Not Found')
     if full_path:
         candidate = (DIST_DIR / full_path).resolve()

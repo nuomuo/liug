@@ -2,13 +2,12 @@
 
 ## 架构说明（前后端分离）
 
-- 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*`（主应用）与 `/system/*`（用户管理）JSON API，并托管 `client/dist`（主应用前端）与 `admin-client/dist`（用户管理前端）两个静态站点。依赖见 `server/requirements.txt`。
-- 用户管理前端为独立 Vue3 程序 `admin-client/`（开发端口 5181，`/system` 代理到 4300，生产托管在 `/system-admin/` 子路径，构建需 `base: '/system-admin/'`）。
+- 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*` JSON API，并托管 `client/dist`（主应用前端）静态站点。依赖见 `server/requirements.txt`。
 - 前端为 Vue3 + Vite（`client/`），构建产物在 `client/dist/`；前端改动后需 `npm run build --prefix client`。
-- 桌面四象限小组件：`server/desktop_widget.py`（pywebview 无边框透明置顶窗口，加载主应用 `/quadrant` 页面，组件为 `client/src/components/QuadrantWidget.vue`）；优先复用已运行的 4300 主服务，否则内嵌 uvicorn 独立运行，可用 `DIDA_WIDGET_SERVER_URL` 指定服务地址、`DIDA_WIDGET_FORCE_EMBEDDED=1` 强制内嵌。打包为单个 exe：`python -m PyInstaller --noconfirm quadrant.spec`（产物 `dist/quadrant.exe`；冻结模式下数据目录为 exe 同级 `data/`，静态资源用 `DIDA_DIST_DIR`/`DIDA_ADMIN_DIST_DIR` 指向 _MEIPASS 内副本）。
+- 桌面四象限小组件：`server/desktop_widget.py`（pywebview 无边框透明置顶窗口，加载主应用 `/quadrant` 页面，组件为 `client/src/components/QuadrantWidget.vue`）；优先复用已运行的 4300 主服务，否则内嵌 uvicorn 独立运行，可用 `DIDA_WIDGET_SERVER_URL` 指定服务地址、`DIDA_WIDGET_FORCE_EMBEDDED=1` 强制内嵌。打包为单个 exe：`python -m PyInstaller --noconfirm quadrant.spec`（产物 `dist/quadrant.exe`；冻结模式下数据目录为 exe 同级 `data/`，静态资源用 `DIDA_DIST_DIR` 指向 _MEIPASS 内副本）。
 - 桌面版整应用：`server/desktop_app.py`（单进程 = 系统托盘 pystray + 主界面窗口 + 可选四象限小组件 + 内嵌 uvicorn，优先 4300 被占则随机端口；Windows 互斥体单实例防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束，右键菜单可开关小组件；应用显示名为「流光 LIUG」，严禁再以「滴答清单/dida」命名对外可见的名称）。打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；依赖 pystray/pywebview/pillow；冻结模式数据目录为 exe 同级 `data/`，运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
 - 多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。
-- 密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`，管理端独立密钥为 `data/users.db.system-secret`。
+- 密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`。
 - 旧 Node 后端备份在 `server-node-backup/`，旧 Flask 管理程序备份在 `system-admin-flask-backup/`，均已退役、不再维护。
 
 ## 数据库隔离（最高优先级）
@@ -46,10 +45,10 @@ DIDA_DB_PATH=data/schedule.test.db python server/import_csv.py <csv路径>
   - 通用组件必须自包含：不依赖特定页面的数据/store 字段，通过 `props` / `emits`（`v-model`）通信，样式（含玻璃风格变量）随组件走。
   - 弹层类组件统一用 `<Teleport to="body">` + `store.js` 的 `placeDropdown()` 定位，保证跨页面行为一致。
 
-## 用户管理（已合并进主后端）
+## 用户管理
 
-用户管理功能由主后端统一提供，**不再有独立程序**（原 system-admin 的 4302/4303 端口已废弃）：
+用户管理模块（独立前端 `admin-client/` 与 `/system/*` JSON API、`/system-admin/` 管理页）已整体移除，项目不再包含任何用户管理代码：
 
-- 管理页地址：`http://localhost:4300/system-admin/`（生产）/ `http://localhost:4301/system-admin/`（测试）；对应 `/system/*` JSON API。
-- 管理端使用独立 Cookie `dida_system_session` 与独立密钥 `data/users.db.system-secret`，仅管理员可登录；主应用登录态使用 Cookie `dida_session` 与密钥 `data/users.db.secret`，两者互不干扰。
-- Vue client（`client/`）不包含任何用户管理代码；用户管理一律在管理页进行。
+- Vue client（`client/`）不包含任何用户管理代码；`server/` 下无 `routes_system.py`。
+- 账户体系仍保留：登录态使用 Cookie `dida_session` 与密钥 `data/users.db.secret`（多用户数据隔离见上文）。
+- 若需增删用户/重置密码，需直接维护 `data/users.db`（须用户明确授权）。
