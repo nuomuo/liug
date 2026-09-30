@@ -20,10 +20,10 @@ import db
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent / 'data'
 
-# 用户主库：默认 data/users.db；测试通过 DIDA_USERS_DB_PATH 指向独立文件
-USERS_DB_PATH = Path(os.environ.get('DIDA_USERS_DB_PATH') or (DATA_DIR / 'users.db')).resolve()
+# 用户主库：默认 data/users.db；测试通过 LIUG_USERS_DB_PATH 指向独立文件
+USERS_DB_PATH = Path(os.environ.get('LIUG_USERS_DB_PATH') or (DATA_DIR / 'users.db')).resolve()
 
-SESSION_COOKIE = 'dida_session'
+SESSION_COOKIE = 'liug_session'
 SESSION_TTL = 7 * 24 * 3600  # 7 天（秒）
 SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_DKLEN = 16384, 8, 1, 64  # 与 Node crypto.scryptSync 默认参数一致
 
@@ -299,7 +299,7 @@ def bootstrap_users(legacy_db_path=None):
 
     # 生产环境（未重定向用户主库）且存在旧正式库时，把旧数据只读复制为 admin 的用户库。
     # 仅读取 schedule.db（VACUUM INTO），不修改、不删除原文件。
-    if not os.environ.get('DIDA_USERS_DB_PATH') and legacy_db_path and Path(legacy_db_path).exists():
+    if not os.environ.get('LIUG_USERS_DB_PATH') and legacy_db_path and Path(legacy_db_path).exists():
         try:
             dest = db.user_db_path(admin['id'])
             src = sqlite3.connect(Path(legacy_db_path).resolve().as_uri() + '?mode=ro', uri=True)

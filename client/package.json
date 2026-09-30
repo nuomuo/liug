@@ -1,9 +1,9 @@
 {
-  "name": "dida-clone-client",
+  "name": "liug-client",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "清单日历 —— 模仿滴答清单网页版的日程管理应用（Vue3 + FastAPI + SQLite，前后端分离）",
+  "description": "流光 LIUG —— 自托管日程管理应用（Vue3 + FastAPI + SQLite，前后端分离）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

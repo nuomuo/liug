@@ -8,7 +8,7 @@
 - Windows 互斥体单实例锁，重复启动弹提示退出，避免双进程写 SQLite。
 
 启动：python server/desktop_app.py
-测试库：$env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; python server/desktop_app.py
+测试库：$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_app.py
 打包：python -m PyInstaller --noconfirm liug.spec（产物 dist/liug.exe）
 """
 import json
@@ -22,14 +22,14 @@ from pathlib import Path
 import uvicorn
 
 # PyInstaller 冻结模式（liug.exe）：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 DIDA_USERS_DB_PATH / DIDA_USERS_DIR 覆盖）
+# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_USERS_DB_PATH / LIUG_USERS_DIR 覆盖）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('DIDA_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
-    os.environ.setdefault('DIDA_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
-    os.environ.setdefault('DIDA_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
+    os.environ.setdefault('LIUG_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
+    os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
+    os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
     # 无控制台模式（console=False）下 sys.stdout/stderr 为 None，
     # pythonnet/clr_loader 初始化或日志写入会因 None 崩溃导致进程静默退出——必须替换掉
     if sys.stdout is None:
@@ -343,7 +343,7 @@ def _dist_version() -> str:
     URL 不同即绕过缓存；mtime 随每次前端构建变化，天然单调。
     """
     try:
-        dist = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
+        dist = Path(os.environ.get('LIUG_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
         return str(int((dist / 'index.html').stat().st_mtime))
     except OSError:
         return '0'
@@ -492,8 +492,8 @@ def main():
 
     # 初始化用户主库（全新空库自动创建 admin/admin123；冻结模式数据目录为 exe 同级 data/）
     legacy = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data' / 'schedule.db'
-    if not _EXE_DIR and not os.environ.get('DIDA_USERS_DB_PATH'):
-        print('[desktop] 提示：开发模式未设置 DIDA_USERS_DB_PATH，将使用项目数据目录 data/（正式库）')
+    if not _EXE_DIR and not os.environ.get('LIUG_USERS_DB_PATH'):
+        print('[desktop] 提示：开发模式未设置 LIUG_USERS_DB_PATH，将使用项目数据目录 data/（正式库）')
     users.bootstrap_users(legacy_db_path=legacy)
 
     server, base_url = _start_server()

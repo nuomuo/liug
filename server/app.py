@@ -19,8 +19,8 @@ from errors import ApiError
 from routes_api import router as api_router
 
 BASE_DIR = Path(__file__).resolve().parent
-# 静态资源目录：可用环境变量覆盖（quadrant.exe 冻结模式下指向 PyInstaller 解包目录 _MEIPASS 内的副本）
-DIST_DIR = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
+# 静态资源目录：可用环境变量覆盖（liug.exe 冻结模式下指向 PyInstaller 解包目录 _MEIPASS 内的副本）
+DIST_DIR = Path(os.environ.get('LIUG_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
 PORT = int(os.environ.get('PORT') or '4300')
 
 # redirect_slashes=False：对齐 Express（/api/tasks/ 不做 307 重定向）

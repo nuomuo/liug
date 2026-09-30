@@ -71,7 +71,7 @@ python -m PyInstaller --noconfirm quadrant.spec
 ```
 
 - 已打包 `client/dist` 静态资源；主服务运行时复用 4300，否则内嵌服务独立运行
-- 独立运行时数据放在 exe 同级 `data/` 目录（与源码运行的 `data/` 互不干扰；也可用 `DIDA_USERS_DB_PATH`/`DIDA_USERS_DIR` 覆盖）
+- 独立运行时数据放在 exe 同级 `data/` 目录（与源码运行的 `data/` 互不干扰；也可用 `LIUG_USERS_DB_PATH`/`LIUG_USERS_DIR` 覆盖）
 - 注意：spec 中打包了 conda `Library/bin` 下的 OpenSSL/libffi/sqlite3 等运行时 DLL，换 Python 环境构建时需确认该目录仍存在
 
 ## 五、桌面版整应用（liug.exe）
@@ -83,7 +83,7 @@ python -m PyInstaller --noconfirm quadrant.spec
 python server/desktop_app.py
 
 # 测试库运行
-$env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; python server/desktop_app.py
+$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_app.py
 
 # 打包成单个 exe（需先 build 过 client）
 pip install pyinstaller pystray pillow
@@ -111,14 +111,14 @@ python -m PyInstaller --noconfirm liug.spec
 
 ```powershell
 # 主应用测试服务器（4301，首次启动自动创建测试管理员 admin / admin123）
-$env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
+$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
 # 访问 http://localhost:4301
 
-# 导入滴答清单备份 CSV 到测试库
-$env:DIDA_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路径>
+# 导入外部清单应用备份 CSV 到测试库
+$env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路径>
 ```
 
-用完记得清掉环境变量（`Remove-Item Env:DIDA_USERS_DB_PATH` 等）或直接关闭该终端，避免下次误连测试库。
+用完记得清掉环境变量（`Remove-Item Env:LIUG_USERS_DB_PATH` 等）或直接关闭该终端，避免下次误连测试库。
 
 ## 七、常见问题
 

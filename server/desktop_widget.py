@@ -4,7 +4,7 @@
 主服务未运行时在当前进程内嵌一份 uvicorn（127.0.0.1 随机端口）独立工作。
 
 启动：python server/desktop_widget.py
-测试库：$env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; python server/desktop_widget.py
+测试库：$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_widget.py
 """
 import os
 import socket
@@ -16,14 +16,14 @@ from pathlib import Path
 import uvicorn
 
 # PyInstaller 冻结模式（quadrant.exe）：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 DIDA_USERS_DB_PATH / DIDA_USERS_DIR 覆盖）
+# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_USERS_DB_PATH / LIUG_USERS_DIR 覆盖）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('DIDA_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
-    os.environ.setdefault('DIDA_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
-    os.environ.setdefault('DIDA_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
+    os.environ.setdefault('LIUG_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
+    os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
+    os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
 else:
     _EXE_DIR = None
 
@@ -42,7 +42,7 @@ WIDGET_MAX_SIZE = (1100, 900)
 def _dist_version() -> str:
     """取 client/dist/index.html 的 mtime 作版本号，附加到 URL 破 WebView2 持久缓存（同 desktop_app.py）"""
     try:
-        dist = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
+        dist = Path(os.environ.get('LIUG_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
         return str(int((dist / 'index.html').stat().st_mtime))
     except OSError:
         return '0'
@@ -146,12 +146,12 @@ def main():
         raise SystemExit('缺少依赖 pywebview，请先执行：pip install pywebview')
 
     # 显式指定服务地址（测试/远程场景）；否则优先复用本机主服务，最后内嵌独立运行
-    # DIDA_WIDGET_FORCE_EMBEDDED=1 可跳过探活强制内嵌（打包验证/数据隔离场景）
-    override = os.environ.get('DIDA_WIDGET_SERVER_URL', '').rstrip('/')
+    # LIUG_WIDGET_FORCE_EMBEDDED=1 可跳过探活强制内嵌（打包验证/数据隔离场景）
+    override = os.environ.get('LIUG_WIDGET_SERVER_URL', '').rstrip('/')
     if override:
         base_url = override
         print(f'[widget] 使用指定服务 {base_url}')
-    elif not os.environ.get('DIDA_WIDGET_FORCE_EMBEDDED') and _main_server_alive():
+    elif not os.environ.get('LIUG_WIDGET_FORCE_EMBEDDED') and _main_server_alive():
         base_url = MAIN_SERVER
         print(f'[widget] 复用已运行的主服务 {MAIN_SERVER}')
     else:

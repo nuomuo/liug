@@ -1,6 +1,6 @@
 """每用户独立 SQLite 数据库（口径 1:1 对应原 Node 版 server/db.js）
 
-- 用户数据目录：DIDA_USERS_DIR 环境变量或 data/users/（测试指向 data/users-test）
+- 用户数据目录：LIUG_USERS_DIR 环境变量或 data/users/（测试指向 data/users-test）
 - 每个用户一个 <uuid>.db 文件；连接缓存 + 每用户 RLock（FastAPI 同步端点跑线程池，同用户请求按锁串行）
 - 连接统一：autocommit（对齐 node:sqlite 逐语句提交）+ WAL + 外键开启（对齐 node:sqlite 默认）
 """
@@ -14,8 +14,8 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent / 'data'
 
 # 用户数据目录：每个用户一个独立 SQLite 文件（文件名 = 用户唯一 ID）；
-# 测试通过 DIDA_USERS_DIR 指向独立目录，避免污染正式用户数据
-USERS_DIR = Path(os.environ.get('DIDA_USERS_DIR') or (DATA_DIR / 'users')).resolve()
+# 测试通过 LIUG_USERS_DIR 指向独立目录，避免污染正式用户数据
+USERS_DIR = Path(os.environ.get('LIUG_USERS_DIR') or (DATA_DIR / 'users')).resolve()
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 
 SCHEMA = """
