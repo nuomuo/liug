@@ -192,6 +192,71 @@ function onWheel(e) {
   zoom(e.deltaY < 0 ? 1 : -1);
 }
 
+// ---------- 拖动窗口（标题栏专属） ----------
+// 不用 pywebview 的 easy_drag（其监听任意 mousedown，拖任务/点缩放手柄都会带着窗口跑，
+// 且 HTML5 拖拽吞掉 mouseup 后鼠标一动窗口就跟着飘）；也放弃了 WM_NCLBUTTONDOWN/HTCAPTION
+// 系统原生拖动（实测在 WebView2 下窗口收到消息但不进入移动循环）。
+// 最终采用与窗口缩放同款的指针方案（server/widget_window.py MoveSession）：
+// 前端只发信号：begin_move() → pointermove 节流调 update_move() → end_move()，
+// 光标坐标一律由后端 GetCursorPos 取（避开 Chromium DIP 与 Win32 物理像素的 DPI 差）。
+function onHeaderPointerDown(e) {
+  if (e.button !== 0) return;
+  if (e.target.closest('.qw-actions')) return; // 右上角按钮区不触发拖动
+  e.preventDefault();
+  window.pywebview?.api?.begin_move?.();
+  const el = e.currentTarget;
+  el.setPointerCapture(e.pointerId); // 拖出窗口外仍持续收到 move/up
+  let last = 0;
+  const onMove = () => {
+    const now = performance.now();
+    if (now - last < 16) return; // ~60fps 节流，防 RPC 积压
+    last = now;
+    window.pywebview?.api?.update_move?.();
+  };
+  const onUp = () => {
+    el.removeEventListener('pointermove', onMove);
+    el.removeEventListener('pointerup', onUp);
+    el.removeEventListener('pointercancel', onUp);
+    window.pywebview?.api?.end_move?.();
+  };
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+}
+
+// ---------- 拖拽边缘/角落缩放窗口 ----------
+// frameless 窗口原生不支持边缘 resize，后端用 Win32 补齐（server/widget_window.py）。
+// 前端只发信号：begin_resize(edge) → pointermove 节流调 update_resize() → end_resize()，
+// 光标坐标一律由后端 GetCursorPos 取（避开 Chromium DIP 与 Win32 物理像素的 DPI 差）。
+const RESIZE_EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+const EDGE_CURSORS = {
+  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
+  ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize',
+};
+function onResizeDown(e, edge) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  window.pywebview?.api?.begin_resize?.(edge);
+  const el = e.currentTarget;
+  el.setPointerCapture(e.pointerId); // 拖出窗口外仍持续收到 move/up
+  let last = 0;
+  const onMove = () => {
+    const now = performance.now();
+    if (now - last < 16) return; // ~60fps 节流，防 RPC 积压
+    last = now;
+    window.pywebview?.api?.update_resize?.();
+  };
+  const onUp = () => {
+    el.removeEventListener('pointermove', onMove);
+    el.removeEventListener('pointerup', onUp);
+    el.removeEventListener('pointercancel', onUp);
+    window.pywebview?.api?.end_resize?.();
+  };
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+}
+
 // ---------- 半透明配色三档：玻璃白 / 主题色轻染 / 暗色（localStorage 记忆） ----------
 const TINT_KEY = 'quadrant-widget-tint';
 const TINTS = [
@@ -228,7 +293,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="qw-root" :class="'tint-' + tint" @wheel="onWheel">
     <div class="qw-panel">
-      <div class="qw-header">
+      <div class="qw-header" @pointerdown="onHeaderPointerDown">
         <Icon name="matrix-sidebar" :size="16" />
         <span class="qw-title">四象限</span>
         <span class="qw-count" v-if="store.user && total">{{ total }}</span>
@@ -318,6 +383,19 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- 窗口边缘/角落缩放手柄（@mousedown.stop 防御性阻断可能的窗口级 mousedown 监听） -->
+    <template v-if="inPywebview">
+      <div
+        v-for="edge in RESIZE_EDGES"
+        :key="edge"
+        class="qw-rh"
+        :class="'rh-' + edge"
+        :style="{ cursor: EDGE_CURSORS[edge] }"
+        @pointerdown="onResizeDown($event, edge)"
+        @mousedown.stop
+      ></div>
+    </template>
 
     <QuickAdd v-if="store.quickAdd.open" />
     <TaskDetail v-if="detailTask" :task="detailTask" />
@@ -632,4 +710,24 @@ onBeforeUnmount(() => {
   font-size: 11px;
   padding: 14px 0;
 }
+
+/* ---------- 窗口缩放手柄：压住窗口边/角并盖过面板边缘（qw-root 8px padding + 面板边），
+   保证用户按视觉上的面板边缘/角落拖动即缩放；角落手柄后渲染覆盖边手柄 ---------- */
+.qw-rh {
+  position: fixed;
+  z-index: 20;
+  touch-action: none; /* 保证 pointer capture 不被浏览器手势打断 */
+  user-select: none;
+}
+.rh-n, .rh-s { left: 20px; right: 20px; height: 12px; }
+.rh-n { top: 0; }
+.rh-s { bottom: 0; }
+.rh-e, .rh-w { top: 20px; bottom: 20px; width: 12px; }
+.rh-e { right: 0; }
+.rh-w { left: 0; }
+.rh-ne, .rh-nw, .rh-se, .rh-sw { width: 20px; height: 20px; }
+.rh-ne { top: 0; right: 0; }
+.rh-nw { top: 0; left: 0; }
+.rh-se { bottom: 0; right: 0; }
+.rh-sw { bottom: 0; left: 0; }
 </style>

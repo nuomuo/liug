@@ -44,13 +44,14 @@ else:
     _EXE_DIR = None
 
 import users
+from widget_window import MoveSession, ResizeSession
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_NAME = '流光'
 PREFERRED_PORT = 4300
 MUTEX_NAME = 'Global\\LiugDesktopAppSingleInstance'
 
-# 桌面小组件窗口尺寸上下限（frameless 窗口不支持拖拽边缘调整，只能通过 API 缩放）
+# 桌面小组件窗口尺寸上下限（拖拽边缘/角落缩放与 API 缩放共用同一上下限）
 WIDGET_MIN_SIZE = (420, 320)
 WIDGET_MAX_SIZE = (1100, 900)
 WIDGET_DEFAULT_SIZE = (560, 440)
@@ -237,7 +238,9 @@ class _WidgetApi:
 
     def __init__(self):
         self._window = None
-        self._size = list(WIDGET_DEFAULT_SIZE)  # frameless 窗口不可拖拽调大小，自行跟踪当前尺寸
+        self._size = list(WIDGET_DEFAULT_SIZE)  # 当前窗口尺寸（逻辑像素），拖拽缩放/API 缩放后同步
+        self._resize = None  # 进行中的拖拽缩放会话（widget_window.ResizeSession）
+        self._move = None    # 进行中的窗口拖动会话（widget_window.MoveSession）
 
     def close(self):
         if self._window:
@@ -247,6 +250,28 @@ class _WidgetApi:
     def minimize(self):
         if self._window:
             self._window.minimize()
+
+    # ---- 标题栏拖动窗口（HTCAPTION 原生拖动在 WebView2 下不生效，改用与缩放同款的指针方案）----
+    # 前端三步调用：begin_move() → update_move()（拖动中高频） → end_move()
+
+    def begin_move(self):
+        """开始拖动窗口：标题栏 pointerdown 时调用"""
+        s = MoveSession(WIDGET_TITLE)
+        self._move = s if s.begin() else None
+
+    def update_move(self):
+        """拖动中按光标增量平移窗口（每次 pointermove 调一次）"""
+        if self._move:
+            self._move.update()
+
+    def end_move(self):
+        """结束拖动：持久化最终位置"""
+        if not self._move:
+            return
+        geo = self._move.end()
+        self._move = None
+        if geo:
+            _write_widget_state(x=geo[0], y=geo[1])  # 记住位置，下次打开原位恢复
 
     def open_main(self):
         """小组件未登录时的「去登录」入口：打开（或还原）主界面窗口"""
@@ -279,6 +304,30 @@ class _WidgetApi:
         _write_widget_state(w=w, h=h)  # 记住尺寸，下次打开保持
         return [w, h]
 
+    # ---- 拖拽边缘/角落缩放（frameless 窗口原生不支持，用 Win32 补齐，见 widget_window.py）----
+    # 前端三步调用：begin_resize(edge) → update_resize()（拖动中高频） → end_resize()
+
+    def begin_resize(self, edge):
+        """开始一次拖拽缩放：edge 为 n/s/e/w/ne/nw/se/sw"""
+        s = ResizeSession(WIDGET_TITLE, WIDGET_MIN_SIZE, WIDGET_MAX_SIZE)
+        self._resize = s if s.begin(edge) else None
+
+    def update_resize(self):
+        """拖动过程中按光标增量移动+缩放窗口（每次 pointermove 调一次）"""
+        if self._resize:
+            self._resize.update()
+
+    def end_resize(self):
+        """结束拖拽：同步内存尺寸并持久化最终位置/尺寸"""
+        if not self._resize:
+            return
+        geo = self._resize.end()
+        self._resize = None
+        if geo:
+            x, y, w, h = geo
+            self._size = [w, h]
+            _write_widget_state(x=x, y=y, w=w, h=h)
+
 
 def _widget_alive() -> bool:
     import webview
@@ -286,9 +335,24 @@ def _widget_alive() -> bool:
     return w is not None and w in webview.windows
 
 
+def _dist_version() -> str:
+    """取 client/dist/index.html 的 mtime 作为版本号：附加到加载 URL 上破 WebView2 持久缓存。
+
+    WebView2 用户数据目录（%APPDATA%/pywebview）是持久的，对无缓存头的旧版 index.html
+    存在启发式缓存——即便服务端已改为 no-cache，旧条目仍可能在过期前一直被直接命中。
+    URL 不同即绕过缓存；mtime 随每次前端构建变化，天然单调。
+    """
+    try:
+        dist = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
+        return str(int((dist / 'index.html').stat().st_mtime))
+    except OSError:
+        return '0'
+
+
 def _create_main_window(base_url):
     import webview
-    w = webview.create_window(APP_NAME, base_url, width=1280, height=860, min_size=(960, 640))
+    w = webview.create_window(APP_NAME, f'{base_url}/?v={_dist_version()}',
+                              width=1280, height=860, min_size=(960, 640))
     _state['main'] = w
 
     def _on_closing():
@@ -302,9 +366,13 @@ def _create_main_window(base_url):
     w.events.closing += _on_closing
 
 
-def _create_widget_window(base_url):
+def _create_widget_window(base_url, rebuild=False):
     import webview
     if _widget_alive():
+        try:
+            _state['widget'].restore()  # 若此前被最小化，先还原（restored 处理器会顺带修复透明）
+        except Exception:
+            pass
         _state['widget'].show()
         return
     # 恢复上次的位置/尺寸（首次打开用默认值）
@@ -320,12 +388,13 @@ def _create_widget_window(base_url):
     api = _WidgetApi()
     api._size = [w, h]
     win = webview.create_window(
-        WIDGET_TITLE, f'{base_url}/quadrant', width=w, height=h,
+        WIDGET_TITLE, f'{base_url}/quadrant?v={_dist_version()}', width=w, height=h,
         min_size=WIDGET_MIN_SIZE, **pos,
         frameless=True,   # 无边框：UI 完全由前端面板绘制
         transparent=True,  # 透明背景：只显示小组件面板本体
         on_top=False,     # 默认不置顶，不遮挡其他应用；置顶由标题栏图钉按钮切换（持久化）
-        easy_drag=True,   # 按住页面空白处（如标题栏）即可拖动窗口
+        easy_drag=False,  # 必须显式关闭（默认 True！）：其监听任意 mousedown，会与页面内
+        # 拖任务/缩放手柄冲突（HTML5 拖拽吞掉 mouseup 后窗口跟着鼠标跑）；拖动改由标题栏 begin/update/end_move API 实现
         js_api=api,
     )
     api._window = win
@@ -336,8 +405,31 @@ def _create_widget_window(base_url):
         # 上次是置顶状态则恢复（Win32 层切换，见 _set_widget_topmost）
         if st.get('pin'):
             _set_widget_topmost(True)
+        if rebuild:
+            # pywebview 的透明窗口 hack（创建时 Show→Hide）只在 webview.start() 时生效，
+            # 托盘动态重建的窗口透明合成失效，shown 后 hide→show 强制重建一次
+            time.sleep(0.2)
+            try:
+                win.hide()
+                time.sleep(0.3)
+                win.show()
+            except Exception:
+                pass
+
+    def _on_restored():
+        # WebView2 透明窗口最小化再还原后透明合成会失效（面板背后露出窗体底色，
+        # 半透明面板/按钮视觉全变），hide→show 一次强制重建合成层即可恢复
+        # （与 pywebview 初始化透明窗口时的 Show/Hide hack 同理）
+        time.sleep(0.2)  # 等还原动画结束、窗口状态稳定
+        try:
+            win.hide()
+            time.sleep(0.3)
+            win.show()
+        except Exception:
+            pass
 
     win.events.shown += _on_shown
+    win.events.restored += _on_restored
 
 
 def _open_main():
@@ -361,7 +453,7 @@ def _toggle_widget():
         _state['widget'] = None
     else:
         _log('托盘：打开桌面小组件')
-        _create_widget_window(_state['base_url'])
+        _create_widget_window(_state['base_url'], rebuild=True)
 
 
 def _quit():

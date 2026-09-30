@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Build output
+client/dist/
+admin-client/dist/
+
+# PyInstaller 打包产物（quadrant.exe）
+build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database files (production + test)
+data/
+
+# Secrets & env
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+example/
+doc/
+skills/
+server-node-backup/*
+system-admin-flask-backup/*

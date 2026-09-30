@@ -10,6 +10,7 @@ import os
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 import uvicorn
@@ -27,9 +28,24 @@ else:
     _EXE_DIR = None
 
 import users
+from widget_window import MoveSession, ResizeSession
 
 BASE_DIR = Path(__file__).resolve().parent
 MAIN_SERVER = 'http://localhost:4300'
+
+# 与 desktop_app.py 保持同口径：窗口标题（Win32 定位用）与尺寸上下限
+WIDGET_TITLE = '四象限'
+WIDGET_MIN_SIZE = (420, 320)
+WIDGET_MAX_SIZE = (1100, 900)
+
+
+def _dist_version() -> str:
+    """取 client/dist/index.html 的 mtime 作版本号，附加到 URL 破 WebView2 持久缓存（同 desktop_app.py）"""
+    try:
+        dist = Path(os.environ.get('DIDA_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
+        return str(int((dist / 'index.html').stat().st_mtime))
+    except OSError:
+        return '0'
 
 
 def _main_server_alive() -> bool:
@@ -64,6 +80,8 @@ class _WidgetApi:
 
     def __init__(self):
         self._window = None
+        self._resize = None  # 进行中的拖拽缩放会话（widget_window.ResizeSession）
+        self._move = None    # 进行中的窗口拖动会话（widget_window.MoveSession）
 
     def close(self):
         if self._window:
@@ -72,6 +90,53 @@ class _WidgetApi:
     def minimize(self):
         if self._window:
             self._window.minimize()
+
+    # ---- 标题栏拖动窗口（HTCAPTION 原生拖动在 WebView2 下不生效，改用与缩放同款的指针方案）----
+
+    def begin_move(self):
+        """开始拖动窗口：标题栏 pointerdown 时调用"""
+        s = MoveSession(WIDGET_TITLE)
+        self._move = s if s.begin() else None
+
+    def update_move(self):
+        """拖动中按光标增量平移窗口（每次 pointermove 调一次）"""
+        if self._move:
+            self._move.update()
+
+    def end_move(self):
+        """结束拖动（独立小组件不做几何持久化）"""
+        if self._move:
+            self._move.end()
+            self._move = None
+
+    def resize(self, dw=0, dh=0, w=None, h=None):
+        """调整窗口尺寸（像素）：传 w/h 直接设置，传 dw/dh 按当前尺寸增量调整，夹在上下限内"""
+        if not self._window:
+            return None
+        if w is None or h is None:
+            w, h = self._window.width + int(dw), self._window.height + int(dh)
+        w = max(WIDGET_MIN_SIZE[0], min(WIDGET_MAX_SIZE[0], int(w)))
+        h = max(WIDGET_MIN_SIZE[1], min(WIDGET_MAX_SIZE[1], int(h)))
+        self._window.resize(w, h)
+        return [w, h]
+
+    # ---- 拖拽边缘/角落缩放（frameless 窗口原生不支持，用 Win32 补齐，见 widget_window.py）----
+
+    def begin_resize(self, edge):
+        """开始一次拖拽缩放：edge 为 n/s/e/w/ne/nw/se/sw"""
+        s = ResizeSession(WIDGET_TITLE, WIDGET_MIN_SIZE, WIDGET_MAX_SIZE)
+        self._resize = s if s.begin(edge) else None
+
+    def update_resize(self):
+        """拖动过程中按光标增量移动+缩放窗口（每次 pointermove 调一次）"""
+        if self._resize:
+            self._resize.update()
+
+    def end_resize(self):
+        """结束拖拽（独立小组件不做几何持久化）"""
+        if self._resize:
+            self._resize.end()
+            self._resize = None
 
 
 def main():
@@ -100,18 +165,31 @@ def main():
 
     api = _WidgetApi()
     window = webview.create_window(
-        '四象限',
-        f'{base_url}/quadrant',
+        WIDGET_TITLE, f'{base_url}/quadrant?v={_dist_version()}',
         width=560,
         height=440,
         min_size=(420, 320),
         frameless=True,   # 无边框：UI 完全由前端面板绘制
         transparent=True,  # 透明背景：只显示小组件面板本体
         on_top=True,      # 窗口置顶，常驻桌面
-        easy_drag=True,   # 按住页面空白处（如标题栏）即可拖动窗口
+        easy_drag=False,  # 必须显式关闭（默认 True！）：其监听任意 mousedown，会与页面内
+        # 拖任务/缩放手柄冲突（HTML5 拖拽吞掉 mouseup 后窗口跟着鼠标跑）；拖动改由标题栏 begin/update/end_move API 实现
         js_api=api,
     )
     api._window = window
+
+    def _on_restored():
+        # WebView2 透明窗口最小化再还原后透明合成会失效（面板背后露出窗体底色），
+        # hide→show 一次强制重建合成层即可恢复（pywebview 初始化时亦用同类 hack）
+        time.sleep(0.2)  # 等还原动画结束、窗口状态稳定
+        try:
+            window.hide()
+            time.sleep(0.3)
+            window.show()
+        except Exception:
+            pass
+
+    window.events.restored += _on_restored
     webview.start()
 
 

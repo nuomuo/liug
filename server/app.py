@@ -53,7 +53,11 @@ def spa_fallback(full_path: str):
             candidate = None  # 防目录穿越
         if candidate and candidate.is_file():
             return FileResponse(candidate)
-    return FileResponse(DIST_DIR / 'index.html')
+    # index.html 必须每次回源校验（no-cache + ETag 条件请求）：
+    # WebView2 磁盘缓存持久化（%APPDATA%\pywebview），无缓存头时旧 index.html 会被
+    # 启发式缓存，导致前端更新后旧 JS 包迟迟不刷新（静态资源带 hash 可安全长缓存）
+    return FileResponse(DIST_DIR / 'index.html',
+                        headers={'Cache-Control': 'no-cache'})
 
 
 if __name__ == '__main__':
