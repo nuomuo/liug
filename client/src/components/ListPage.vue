@@ -4,6 +4,7 @@ import { store, getProject, toggleTask, taskTimeLabel, parseLocal, openTaskDetai
 import Icon from './Icon.vue';
 import GlassSelect from './GlassSelect.vue';
 import DatePicker from './DatePicker.vue';
+import TaskDetail from './TaskDetail.vue';
 
 // 筛选条件
 const selectedList = ref(0); // 清单类型：0 = 全部
@@ -18,8 +19,8 @@ const listOptions = computed(() => lists.value.map((l) => ({ value: l.id, label:
 const tagOptions = computed(() => [{ value: '', label: '全部' }, ...allTags.value.map((t) => ({ value: t, label: '#' + t }))]);
 const statusOptions = [
   { value: 'active', label: '未完成' },
-  { value: 'all', label: '全部' },
   { value: 'done', label: '已完成' },
+  { value: 'all', label: '全部' },
 ];
 const priorityOptions = [
   { value: '', label: '全部' },
@@ -85,6 +86,10 @@ function resetFilters() {
   priorityFilter.value = '';
 }
 
+// 详情侧栏：左键点任务在右侧展开，右键仍走就地弹窗（openTaskDetail）
+const panelTaskId = ref(null);
+const panelTask = computed(() => store.tasks.find((t) => t.id === panelTaskId.value) || null);
+
 function fmtDue(t) {
   if (!t.dueDate) return '';
   const d = parseLocal(t.dueDate);
@@ -136,21 +141,29 @@ function priColor(p) {
       <button v-if="hasFilter" class="lp-reset" @click="resetFilters">重置</button>
     </aside>
 
-    <main class="lp-main">
-      <div class="lp-header">
-        <div class="lp-title">
-          {{ lists.find((l) => l.id === selectedList)?.name }}
-          <span class="lp-total">{{ tasks.length }}</span>
+    <div class="lp-content">
+      <main class="lp-main">
+        <div class="lp-header">
+          <div class="lp-title">
+            {{ lists.find((l) => l.id === selectedList)?.name }}
+            <span class="lp-total">{{ tasks.length }}</span>
+          </div>
+          <div class="lp-actions">
+            <button class="lp-add" @click="store.quickAdd = { open: true, presetDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()), presetTask: null }">
+              <Icon name="add-small" :size="16" /> 添加任务
+            </button>
+          </div>
         </div>
-        <div class="lp-actions">
-          <button class="lp-add" @click="store.quickAdd = { open: true, presetDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()), presetTask: null }">
-            <Icon name="add-small" :size="16" /> 添加任务
-          </button>
-        </div>
-      </div>
 
-      <div class="lp-list">
-        <div v-for="t in tasks" :key="t.id" class="lp-item" @click="openTaskDetail(t, $event.clientX, $event.clientY)">
+        <div class="lp-list">
+          <div
+            v-for="t in tasks"
+            :key="t.id"
+            class="lp-item"
+            :class="{ active: panelTaskId === t.id }"
+            @click="panelTaskId = t.id"
+            @contextmenu.prevent="openTaskDetail(t, $event.clientX, $event.clientY)"
+          >
           <span class="lp-check" :style="{ color: t.status === 2 ? 'var(--grey-20)' : priColor(t.priority) }" @click.stop="toggleTask(t)">
             <Icon :name="t.status === 2 ? 'calendar-complete' : 'calendar-checkbox'" :size="20" />
           </span>
@@ -164,12 +177,16 @@ function priColor(p) {
             </div>
           </div>
         </div>
-        <div v-if="!tasks.length" class="lp-empty">
-          <Icon name="calendar-sidebar" :size="44" />
-          <p>{{ hasFilter ? '没有符合条件的任务' : '这里空空如也，添加一个任务吧' }}</p>
+          <div v-if="!tasks.length" class="lp-empty">
+            <Icon name="calendar-sidebar" :size="44" />
+            <p>{{ hasFilter ? '没有符合条件的任务' : '这里空空如也，添加一个任务吧' }}</p>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+
+      <!-- 任务详情侧边栏（左键点任务展开，右键为就地弹窗） -->
+      <TaskDetail v-if="panelTask" :task="panelTask" variant="panel" @close="panelTaskId = null" />
+    </div>
   </div>
 </template>
 
@@ -180,6 +197,12 @@ function priColor(p) {
   flex-direction: column;
   overflow: hidden;
   padding: 10px;
+  gap: 10px;
+}
+.lp-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   gap: 10px;
 }
 .lp-side {
@@ -297,6 +320,10 @@ function priColor(p) {
 }
 .lp-item:hover {
   background: rgba(255, 255, 255, 0.45);
+}
+.lp-item.active {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
 }
 .lp-check {
   margin-top: 1px;

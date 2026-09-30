@@ -18,7 +18,9 @@ import MarkdownEditor from './MarkdownEditor.vue';
 
 const props = defineProps({
   task: { type: Object, required: true },
+  variant: { type: String, default: 'popup' }, // popup=就地弹窗（可拖拽缩放） panel=右侧侧边栏
 });
+const emit = defineEmits(['close']);
 
 const title = ref(props.task.title);
 // 日期弹层组件引用（切换任务时关闭）
@@ -186,7 +188,8 @@ function onContentUpdate(v) {
 }
 
 function close() {
-  closeTaskDetail();
+  if (props.variant === 'panel') emit('close');
+  else closeTaskDetail();
 }
 async function remove() {
   if (confirm('确定删除该任务吗？（含子任务）')) {
@@ -251,6 +254,7 @@ function beginDrag(mode, e) {
   document.addEventListener('mouseup', endDrag);
 }
 function startMove(e) {
+  if (props.variant !== 'popup') return; // 侧栏模式不支持拖拽
   if (e.target.closest('.td-close, .td-action')) return;
   beginDrag('move', e);
 }
@@ -294,8 +298,14 @@ onBeforeUnmount(endDrag);
 </script>
 
 <template>
-  <div class="td-backdrop" @mousedown.self="close" @contextmenu.prevent>
-    <div ref="panelEl" class="task-detail" :style="panelStyle" @mousedown.stop>
+  <div class="td-backdrop" :class="{ 'td-side-host': variant === 'panel' }" @mousedown.self="close" @contextmenu.prevent>
+    <div
+      ref="panelEl"
+      class="task-detail"
+      :class="{ 'td-side': variant === 'panel' }"
+      :style="variant === 'popup' ? panelStyle : undefined"
+      @mousedown.stop
+    >
       <div class="td-header-row" @mousedown="startMove">
         <Icon name="panel-close" :size="16" class="td-close" @click="close" />
         <div class="td-actions">
@@ -450,14 +460,16 @@ onBeforeUnmount(endDrag);
         </div>
       </div>
 
-      <!-- 边缘缩放手柄（置于面板内侧，避免被 overflow: hidden 裁剪） -->
-      <span
-        v-for="d in ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']"
-        :key="d"
-        class="td-rz"
-        :class="'td-rz-' + d"
-        @mousedown="beginDrag(d, $event)"
-      ></span>
+      <!-- 边缘缩放手柄（置于面板内侧，避免被 overflow: hidden 裁剪；仅弹窗模式） -->
+      <template v-if="variant === 'popup'">
+        <span
+          v-for="d in ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']"
+          :key="d"
+          class="td-rz"
+          :class="'td-rz-' + d"
+          @mousedown="beginDrag(d, $event)"
+        ></span>
+      </template>
     </div>
 
   </div>
@@ -469,6 +481,32 @@ onBeforeUnmount(endDrag);
   inset: 0;
   z-index: 1100;
   background: transparent;
+}
+/* ---------- 侧栏模式（variant=panel）：宿主容器与面板 ---------- */
+.td-backdrop.td-side-host {
+  position: static;
+  z-index: auto;
+  width: 380px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.task-detail.td-side {
+  position: static;
+  flex: 1;
+  width: auto;
+  height: 100%;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--glass-shadow);
+  animation: td-side-in 0.24s var(--ease-spring);
+}
+@keyframes td-side-in {
+  from { opacity: 0; transform: translateX(18px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+.td-side .td-header-row {
+  cursor: default;
 }
 .task-detail {
   position: fixed;
