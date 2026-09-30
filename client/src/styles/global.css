@@ -90,6 +90,23 @@ body {
   background-repeat: no-repeat;
 }
 
+/* 桌面四象限小组件模式（/quadrant，由 pywebview 无边框透明窗口加载）：
+   页面背景透明，只保留小组件面板本体 */
+body.widget-mode {
+  background: transparent;
+  /* WebView2 透明窗口上 backdrop-filter 会把透明背景“拍”成不透明（登录后小组件发白的原因），
+     改用更实的纯半透明底色保证可读性 */
+  --glass-panel-bg: rgba(255, 255, 255, 0.88);
+  --glass-heavy-bg: rgba(255, 255, 255, 0.94);
+  --glass-dark-bg: rgba(24, 26, 32, 0.88);
+}
+body.widget-mode *,
+body.widget-mode *::before,
+body.widget-mode *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 button { font-family: inherit; background: none; border: none; cursor: pointer; color: inherit; }
 input, textarea { font-family: inherit; outline: none; }
 a { text-decoration: none; color: inherit; }

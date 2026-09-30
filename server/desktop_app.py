@@ -1,0 +1,441 @@
+"""流光 LIUG 桌面版启动器（系统托盘 + 主界面窗口 + 可选桌面四象限小组件）
+
+一个进程搞定全部：
+- 内嵌 uvicorn 服务（优先 4300，被占用则自动换随机端口），托管主应用/管理端前端与 API；
+- 系统托盘常驻（pystray）：双击图标或菜单「打开流光 LIUG」显示主窗口，右键菜单可开关
+  「桌面小组件（四象限）」，「退出」彻底结束进程；
+- 主窗口点 × 仅隐藏到托盘（托盘应用惯例），从托盘「退出」才真正退出；
+- Windows 互斥体单实例锁，重复启动弹提示退出，避免双进程写 SQLite。
+
+启动：python server/desktop_app.py
+测试库：$env:DIDA_USERS_DB_PATH='data/users.test.db'; $env:DIDA_USERS_DIR='data/users-test'; python server/desktop_app.py
+打包：python -m PyInstaller --noconfirm liug.spec（产物 dist/liug.exe）
+"""
+import json
+import os
+import socket
+import sys
+import threading
+import time
+from pathlib import Path
+
+import uvicorn
+
+# PyInstaller 冻结模式（liug.exe）：
+# - 数据目录默认放在 exe 同级 data/ 下（可用 DIDA_USERS_DB_PATH / DIDA_USERS_DIR 覆盖）
+# - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 与 admin-client/dist 副本
+if getattr(sys, 'frozen', False):
+    _EXE_DIR = Path(sys.executable).resolve().parent
+    _MEIPASS = Path(sys._MEIPASS)
+    os.environ.setdefault('DIDA_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
+    os.environ.setdefault('DIDA_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
+    os.environ.setdefault('DIDA_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
+    os.environ.setdefault('DIDA_ADMIN_DIST_DIR', str(_MEIPASS / 'admin-client' / 'dist'))
+    # 无控制台模式（console=False）下 sys.stdout/stderr 为 None，
+    # pythonnet/clr_loader 初始化或日志写入会因 None 崩溃导致进程静默退出——必须替换掉
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+    if sys.stderr is None:
+        try:
+            (_EXE_DIR / 'data').mkdir(parents=True, exist_ok=True)
+            sys.stderr = open(_EXE_DIR / 'data' / 'desktop.err.log', 'a', encoding='utf-8', buffering=1)
+        except Exception:
+            sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+else:
+    _EXE_DIR = None
+
+import users
+
+BASE_DIR = Path(__file__).resolve().parent
+APP_NAME = '流光'
+PREFERRED_PORT = 4300
+MUTEX_NAME = 'Global\\LiugDesktopAppSingleInstance'
+
+# 桌面小组件窗口尺寸上下限（frameless 窗口不支持拖拽边缘调整，只能通过 API 缩放）
+WIDGET_MIN_SIZE = (420, 320)
+WIDGET_MAX_SIZE = (1100, 900)
+WIDGET_DEFAULT_SIZE = (560, 440)
+WIDGET_TITLE = '四象限'  # Win32 窗口标题：ctypes FindWindowW 按标题定位用于置顶切换
+
+_state = {'main': None, 'widget': None, 'widget_api': None, 'icon': None, 'server': None, 'base_url': '', 'quitting': False}
+
+
+def _data_dir() -> Path:
+    return (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+
+
+def _widget_state_file() -> Path:
+    """小组件窗口状态持久化文件（位置/尺寸/置顶）：data/widget.json"""
+    return _data_dir() / 'widget.json'
+
+
+def _load_widget_state() -> dict:
+    try:
+        data = json.loads(_widget_state_file().read_text(encoding='utf-8'))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_widget_state(**kv) -> None:
+    """合并写入小组件状态（单键更新不影响其他字段）"""
+    st = _load_widget_state()
+    st.update(kv)
+    try:
+        _data_dir().mkdir(parents=True, exist_ok=True)
+        _widget_state_file().write_text(json.dumps(st), encoding='utf-8')
+    except Exception:
+        pass
+
+
+def _save_widget_geometry() -> None:
+    """记录小组件当前屏幕位置与尺寸（关闭/退出前调用，下次打开原位恢复）"""
+    w = _state['widget']
+    api = _state.get('widget_api')
+    if not w:
+        return
+    try:
+        kv = {'x': int(w.x), 'y': int(w.y)}
+        if api:
+            kv.update(w=api._size[0], h=api._size[1])
+        _write_widget_state(**kv)
+        _log(f'小组件状态已保存 {kv}')
+    except Exception:
+        pass
+
+
+def _set_widget_topmost(pin: bool) -> bool:
+    """ctypes 切换小组件置顶（pywebview 无运行期 pin 接口，按 Win32 标题找窗口）"""
+    if sys.platform != 'win32':
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, WIDGET_TITLE)
+        if not hwnd:
+            return False
+        SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x1, 0x2, 0x10
+        # HWND_TOPMOST/HWND_NOTOPMOST 为特殊伪句柄 -1/-2（64 位下即符号扩展的全 F）
+        user32.SetWindowPos.restype = ctypes.c_bool
+        return bool(user32.SetWindowPos(
+            ctypes.c_void_p(hwnd), ctypes.c_void_p(-1 if pin else -2),
+            0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE))
+    except Exception:
+        return False
+
+
+def _clamp_widget_pos(x: int, y: int, w: int, h: int):
+    """位置恢复时夹在虚拟屏幕可见范围内（多显示器/分辨率变化后不丢窗口）"""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        vx = user32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+        vy = user32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+        vw = user32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+        vh = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+        if vw > 0 and vh > 0:
+            x = min(max(vx, x), vx + vw - w)
+            y = min(max(vy, y), vy + vh - h)
+    except Exception:
+        pass
+    return x, y
+
+
+def _log(msg: str) -> None:
+    """运行日志：data/desktop.log（无控制台的 exe 场景排查用），同时 print"""
+    line = f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] {msg}'
+    print(line)
+    try:
+        log_dir = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / 'desktop.log', 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except Exception:
+        pass
+
+
+def _install_excepthooks() -> None:
+    """把未捕获异常写进运行日志（windowed exe 弹窗之外留档）"""
+    import traceback
+
+    def _hook(t, v, tb):
+        _log('未捕获异常:\n' + ''.join(traceback.format_exception(t, v, tb)))
+
+    sys.excepthook = _hook
+    threading.excepthook = lambda a: _hook(a.exc_type, a.exc_value, a.exc_traceback)
+
+
+def _acquire_single_instance() -> bool:
+    """Windows 互斥体单实例锁；非首实例时弹框提示后返回 False"""
+    if sys.platform != 'win32':
+        return True
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        ctypes.windll.user32.MessageBoxW(
+            0, f'{APP_NAME}已在运行，请查看任务栏右下角托盘图标。', APP_NAME, 0x40)
+        return False
+    return True
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket() as s:
+        try:
+            s.bind(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
+
+def _free_port() -> int:
+    s = socket.socket()
+    s.bind(('127.0.0.1', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def _wait_ready(base_url: str, timeout: float = 15.0) -> None:
+    """轮询探活，等内嵌服务可对外响应（/api/auth/me 200/401 即就绪）"""
+    import httpx
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if httpx.get(base_url + '/api/auth/me', timeout=1).status_code in (200, 401):
+                return
+        except Exception:
+            pass
+        time.sleep(0.15)
+    raise RuntimeError('内嵌服务启动超时')
+
+
+def _start_server():
+    """内嵌 uvicorn（优先 4300，被其他程序占用则换随机端口），返回 (server, base_url)"""
+    from app import app  # 延迟导入：与源码运行 server/app.py 同一份 FastAPI 应用
+    port = PREFERRED_PORT if _port_free(PREFERRED_PORT) else _free_port()
+    server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning'))
+    threading.Thread(target=server.run, daemon=True, name='uvicorn').start()
+    base_url = f'http://127.0.0.1:{port}'
+    _wait_ready(base_url)
+    return server, base_url
+
+
+def make_app_icon(size: int = 64):
+    """程序化绘制应用图标（蓝色圆角方块 + 白色对勾），托盘图标与 exe 图标共用"""
+    from PIL import Image, ImageDraw
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([1, 1, size - 1, size - 1], radius=int(size * 0.3), fill=(37, 99, 235, 255))
+    lw = max(3, size // 8)
+    d.line([(size * 0.26, size * 0.52), (size * 0.44, size * 0.69), (size * 0.76, size * 0.31)],
+           fill=(255, 255, 255, 255), width=lw, joint='curve')
+    return img
+
+
+class _WidgetApi:
+    """暴露给小组件前端的窗口控制（window.pywebview.api.*）"""
+
+    def __init__(self):
+        self._window = None
+        self._size = list(WIDGET_DEFAULT_SIZE)  # frameless 窗口不可拖拽调大小，自行跟踪当前尺寸
+
+    def close(self):
+        if self._window:
+            _save_widget_geometry()  # 记住当前位置/尺寸，下次打开原位恢复
+            self._window.destroy()
+
+    def minimize(self):
+        if self._window:
+            self._window.minimize()
+
+    def open_main(self):
+        """小组件未登录时的「去登录」入口：打开（或还原）主界面窗口"""
+        _open_main()
+
+    def get_state(self):
+        """小组件窗口状态（前端初始化图钉按钮等用）"""
+        st = _load_widget_state()
+        return {'pin': bool(st.get('pin')), 'size': [self._size[0], self._size[1]]}
+
+    def toggle_pin(self):
+        """切换置顶（默认不置顶，不挡其他应用；置顶状态持久化）"""
+        pin = not bool(_load_widget_state().get('pin'))
+        if _set_widget_topmost(pin):
+            _write_widget_state(pin=pin)
+            _log(f'小组件置顶切换 → {"置顶" if pin else "非置顶"}')
+            return pin
+        return None  # 窗口定位失败（如非 Windows）
+
+    def resize(self, dw=0, dh=0, w=None, h=None):
+        """调整小组件窗口尺寸（像素）：传 w/h 直接设置，传 dw/dh 按增量调整，夹在上下限内"""
+        if not self._window:
+            return None
+        if w is None or h is None:
+            w, h = self._size[0] + int(dw), self._size[1] + int(dh)
+        w = max(WIDGET_MIN_SIZE[0], min(WIDGET_MAX_SIZE[0], int(w)))
+        h = max(WIDGET_MIN_SIZE[1], min(WIDGET_MAX_SIZE[1], int(h)))
+        self._size = [w, h]
+        self._window.resize(w, h)
+        _write_widget_state(w=w, h=h)  # 记住尺寸，下次打开保持
+        return [w, h]
+
+
+def _widget_alive() -> bool:
+    import webview
+    w = _state['widget']
+    return w is not None and w in webview.windows
+
+
+def _create_main_window(base_url):
+    import webview
+    w = webview.create_window(APP_NAME, base_url, width=1280, height=860, min_size=(960, 640))
+    _state['main'] = w
+
+    def _on_closing():
+        if not _state['quitting']:
+            _log('主窗口关闭请求 → 隐藏到托盘')
+            w.hide()
+            return False  # 取消关闭：隐藏到托盘继续驻留
+        _log('主窗口关闭请求 → 退出流程放行')
+        return True  # 托盘「退出」放行销毁
+
+    w.events.closing += _on_closing
+
+
+def _create_widget_window(base_url):
+    import webview
+    if _widget_alive():
+        _state['widget'].show()
+        return
+    # 恢复上次的位置/尺寸（首次打开用默认值）
+    st = _load_widget_state()
+    w, h = int(st.get('w') or 0), int(st.get('h') or 0)
+    if not (WIDGET_MIN_SIZE[0] <= w <= WIDGET_MAX_SIZE[0]):
+        w = WIDGET_DEFAULT_SIZE[0]
+    if not (WIDGET_MIN_SIZE[1] <= h <= WIDGET_MAX_SIZE[1]):
+        h = WIDGET_DEFAULT_SIZE[1]
+    pos = {}
+    if isinstance(st.get('x'), int) and isinstance(st.get('y'), int):
+        pos['x'], pos['y'] = _clamp_widget_pos(st['x'], st['y'], w, h)
+    api = _WidgetApi()
+    api._size = [w, h]
+    win = webview.create_window(
+        WIDGET_TITLE, f'{base_url}/quadrant', width=w, height=h,
+        min_size=WIDGET_MIN_SIZE, **pos,
+        frameless=True,   # 无边框：UI 完全由前端面板绘制
+        transparent=True,  # 透明背景：只显示小组件面板本体
+        on_top=False,     # 默认不置顶，不遮挡其他应用；置顶由标题栏图钉按钮切换（持久化）
+        easy_drag=True,   # 按住页面空白处（如标题栏）即可拖动窗口
+        js_api=api,
+    )
+    api._window = win
+    _state['widget'] = win
+    _state['widget_api'] = api
+
+    def _on_shown():
+        # 上次是置顶状态则恢复（Win32 层切换，见 _set_widget_topmost）
+        if st.get('pin'):
+            _set_widget_topmost(True)
+
+    win.events.shown += _on_shown
+
+
+def _open_main():
+    w = _state['main']
+    if w:
+        w.show()
+        try:
+            w.restore()  # 若此前被最小化则还原
+        except Exception:
+            pass
+
+
+def _toggle_widget():
+    if _widget_alive():
+        _log('托盘：关闭桌面小组件')
+        _save_widget_geometry()  # 记住位置，托盘菜单再打开时原位恢复
+        try:
+            _state['widget'].destroy()
+        except Exception:
+            pass
+        _state['widget'] = None
+    else:
+        _log('托盘：打开桌面小组件')
+        _create_widget_window(_state['base_url'])
+
+
+def _quit():
+    """托盘「退出」/全部窗口销毁后的统一收尾：停服务、关窗口、停托盘"""
+    import webview
+    _log('退出流程开始')
+    _state['quitting'] = True
+    _save_widget_geometry()  # 退出前记住小组件位置/尺寸
+    if _state['server'] is not None:
+        _state['server'].should_exit = True
+    for w in list(webview.windows):
+        try:
+            w.destroy()
+        except Exception:
+            pass
+    if _state['icon'] is not None:
+        try:
+            _state['icon'].stop()
+        except Exception:
+            pass
+
+
+def main():
+    try:
+        import webview
+        import pystray
+    except ImportError as e:
+        raise SystemExit(f'缺少依赖 {e.name}，请先执行：python -m pip install pywebview pystray pillow')
+
+    _install_excepthooks()
+    _log(f'启动（pid={os.getpid()} frozen={bool(_EXE_DIR)}）')
+
+    if not _acquire_single_instance():
+        _log('已有实例在运行，本次启动退出')
+        return
+
+    # 初始化用户主库（全新空库自动创建 admin/admin123；冻结模式数据目录为 exe 同级 data/）
+    legacy = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data' / 'schedule.db'
+    if not _EXE_DIR and not os.environ.get('DIDA_USERS_DB_PATH'):
+        print('[desktop] 提示：开发模式未设置 DIDA_USERS_DB_PATH，将使用项目数据目录 data/（正式库）')
+    users.bootstrap_users(legacy_db_path=legacy)
+
+    server, base_url = _start_server()
+    _state['server'] = server
+    _state['base_url'] = base_url
+    _log(f'内嵌服务已启动 {base_url}')
+
+    # 系统托盘：双击 = 打开主界面；右键菜单可开关桌面小组件、退出
+    menu = pystray.Menu(
+        pystray.MenuItem(f'打开{APP_NAME}', lambda _item: _open_main(), default=True),
+        pystray.MenuItem('显示桌面小组件（四象限）', lambda _item: _toggle_widget(),
+                         checked=lambda _item: _widget_alive()),
+        pystray.MenuItem('退出', lambda _item: _quit()),
+    )
+    icon = pystray.Icon('liug', make_app_icon(), APP_NAME, menu)
+    _state['icon'] = icon
+    icon.run_detached()
+
+    # 主窗口（关闭=隐藏到托盘）+ 桌面小组件（默认展示，可在托盘菜单关闭）
+    _create_main_window(base_url)
+    _create_widget_window(base_url)
+
+    # private_mode=False：保留 cookies/localStorage（登录状态、主题色等跨重启记忆），
+    # storage_path 指到 exe 同级 data/webview，便携不污染系统浏览器配置
+    webview_storage = _data_dir() / 'webview'
+    webview_storage.mkdir(parents=True, exist_ok=True)
+    webview.start(private_mode=False, storage_path=str(webview_storage))  # 阻塞至所有窗口销毁（实际仅托盘「退出」会触发）
+    _log('webview.start() 已返回，开始收尾')
+    _quit()
+    time.sleep(0.3)  # 给 uvicorn/托盘线程一点收尾时间
+    _log('进程退出')
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()

@@ -5,6 +5,8 @@
 - 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*`（主应用）与 `/system/*`（用户管理）JSON API，并托管 `client/dist`（主应用前端）与 `admin-client/dist`（用户管理前端）两个静态站点。依赖见 `server/requirements.txt`。
 - 用户管理前端为独立 Vue3 程序 `admin-client/`（开发端口 5181，`/system` 代理到 4300，生产托管在 `/system-admin/` 子路径，构建需 `base: '/system-admin/'`）。
 - 前端为 Vue3 + Vite（`client/`），构建产物在 `client/dist/`；前端改动后需 `npm run build --prefix client`。
+- 桌面四象限小组件：`server/desktop_widget.py`（pywebview 无边框透明置顶窗口，加载主应用 `/quadrant` 页面，组件为 `client/src/components/QuadrantWidget.vue`）；优先复用已运行的 4300 主服务，否则内嵌 uvicorn 独立运行，可用 `DIDA_WIDGET_SERVER_URL` 指定服务地址、`DIDA_WIDGET_FORCE_EMBEDDED=1` 强制内嵌。打包为单个 exe：`python -m PyInstaller --noconfirm quadrant.spec`（产物 `dist/quadrant.exe`；冻结模式下数据目录为 exe 同级 `data/`，静态资源用 `DIDA_DIST_DIR`/`DIDA_ADMIN_DIST_DIR` 指向 _MEIPASS 内副本）。
+- 桌面版整应用：`server/desktop_app.py`（单进程 = 系统托盘 pystray + 主界面窗口 + 可选四象限小组件 + 内嵌 uvicorn，优先 4300 被占则随机端口；Windows 互斥体单实例防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束，右键菜单可开关小组件；应用显示名为「流光 LIUG」，严禁再以「滴答清单/dida」命名对外可见的名称）。打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；依赖 pystray/pywebview/pillow；冻结模式数据目录为 exe 同级 `data/`，运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
 - 多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。
 - 密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`，管理端独立密钥为 `data/users.db.system-secret`。
 - 旧 Node 后端备份在 `server-node-backup/`，旧 Flask 管理程序备份在 `system-admin-flask-backup/`，均已退役、不再维护。

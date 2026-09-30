@@ -79,6 +79,7 @@ export async function login(username, password) {
     const { user } = await api.login(username, password);
     store.user = user;
     await loadBootstrap();
+    notifySync(); // 通知桌面小组件窗口：已登录，立即拉取数据
     return true;
   } catch (e) {
     store.loginError = e?.data?.error || '登录失败，请检查用户名和密码';
@@ -92,6 +93,7 @@ export async function logout() {
   } catch {}
   store.user = null;
   clearUserData();
+  notifySync(); // 通知桌面小组件窗口：已登出，回到登录提示
 }
 
 /** 会话中途失效（API 返回 401）：回到登录页 */
@@ -212,6 +214,18 @@ export function placeDropdown(menuEl, triggerEl, opts = {}) {
   menuEl.style.top = top + 'px';
 }
 
+// ---------- 跨窗口实时同步（主界面 ↔ 桌面小组件） ----------
+const SYNC_KEY = 'liug-sync';
+
+/** 本窗口数据/登录态变化后打点：同源的其他窗口（桌面小组件/主界面）通过 storage 事件感知并刷新 */
+export function notifySync() {
+  try {
+    localStorage.setItem(SYNC_KEY, String(Date.now()));
+  } catch {
+    /* localStorage 不可用时静默降级为轮询同步 */
+  }
+}
+
 // ---------- 任务操作 ----------
 /** 北京时间（UTC+8）本地时刻 ISO 字符串，与后端/CSV 导入口径一致 */
 export function nowBeijingIso() {
@@ -239,10 +253,12 @@ export async function toggleTask(task) {
   for (const st of store.subtasks.filter((s) => s.parentId === task.id)) {
     Object.assign(st, await api.updateTask(st.id, patch));
   }
+  notifySync();
 }
 
 export async function updateTaskLocal(task, patch) {
   Object.assign(task, await api.updateTask(task.id, patch));
+  notifySync();
 }
 
 export async function deleteTaskLocal(task) {
@@ -250,12 +266,14 @@ export async function deleteTaskLocal(task) {
   store.tasks = store.tasks.filter((t) => t.id !== task.id);
   store.subtasks = store.subtasks.filter((t) => t.parentId !== task.id);
   if (store.detailTaskId === task.id) closeTaskDetail();
+  notifySync();
 }
 
 export async function addTask(payload) {
   const t = await api.createTask(payload);
   if (t.parentId) store.subtasks.push(t);
   else store.tasks.push(t);
+  notifySync(); // 新增也要通知：另一窗口实时可见（新增任务此前不同步的根因）
   return t;
 }
 

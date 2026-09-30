@@ -1,6 +1,6 @@
-# 清单日历（dida-clone）
+# 流光 LIUG
 
-模仿滴答清单网页版「日历」页面的日程管理应用。基于 **Vue 3 + Vite + Express + SQLite**，对照保存的原版页面逐一复刻了全部功能，样式提取自原站 blacksea-photograph-pro-theme（主色 #484553、灰阶 rgba(25,25,25,x)、背景照片、48 个原版 SVG 图标）。
+流光 LIUG：模仿滴答清单网页版「日历」页面的日程管理应用。基于 **Vue 3 + Vite + Express + SQLite**，对照保存的原版页面逐一复刻了全部功能，样式提取自原站 blacksea-photograph-pro-theme（主色 #484553、灰阶 rgba(25,25,25,x)、背景照片、48 个原版 SVG 图标）。
 
 ## 一、原网页功能清单 → 复刻情况
 
