@@ -38,6 +38,7 @@ DIDA_DB_PATH=data/schedule.test.db python server/import_csv.py <csv路径>
 - **已有通用组件（优先复用，勿重复造轮子）**：
   - `MarkdownEditor.vue` —— Markdown 编辑器（左右分栏实时预览、可拖动分割条、右键格式化菜单）。用法：`<MarkdownEditor v-model="内容" placeholder="..." />`。
   - `DatePicker.vue` —— 玻璃风格日期选择器（农历/节假日、清除日期，替代原生 date picker）。用法：`<DatePicker v-model="日期YYYY-MM-DD" title="..." />`；组件暴露 `close()` 方法。
+  - `GlassSelect.vue` —— 玻璃风格下拉选择器（替代原生 select，Teleport 弹层、选中项对勾、可选项色点）。用法：`<GlassSelect v-model="值" :options="[{ value, label, dot? }]" />`；组件暴露 `close()` 方法。
 - **组件化要求**：
   - 新增功能若包含可复用的 UI/交互（编辑器、选择器、弹层、菜单等），必须先抽成独立组件再接入页面，而不是把逻辑写死在某个页面组件里。
   - 通用组件必须自包含：不依赖特定页面的数据/store 字段，通过 `props` / `emits`（`v-model`）通信，样式（含玻璃风格变量）随组件走。

@@ -1,18 +1,55 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { store, getProject, toggleTask, taskTimeLabel, parseLocal, openTaskDetail } from '../store.js';
+import { store, getProject, toggleTask, taskTimeLabel, parseLocal, openTaskDetail, allTags } from '../store.js';
 import Icon from './Icon.vue';
+import GlassSelect from './GlassSelect.vue';
+import DatePicker from './DatePicker.vue';
 
-// 清单选择
-const selectedList = ref(0); // 0 = 全部
+// 筛选条件
+const selectedList = ref(0); // 清单类型：0 = 全部
+const selectedTag = ref(''); // 标签：'' = 全部
+const rangeStart = ref(''); // 时间范围起始日期 YYYY-MM-DD，空 = 不限
+const rangeEnd = ref(''); // 时间范围结束日期 YYYY-MM-DD，空 = 不限
+const statusFilter = ref('active'); // 任务状态：active=未完成 all=全部 done=已完成
+const priorityFilter = ref(''); // 优先级：''=全部 5=高 3=中 1=低 0=无
+
 const lists = computed(() => [{ id: 0, name: '全部', emoji: '' }, ...store.projects]);
-const showDone = ref(false);
+const listOptions = computed(() => lists.value.map((l) => ({ value: l.id, label: (l.emoji ? l.emoji + ' ' : '') + l.name })));
+const tagOptions = computed(() => [{ value: '', label: '全部' }, ...allTags.value.map((t) => ({ value: t, label: '#' + t }))]);
+const statusOptions = [
+  { value: 'active', label: '未完成' },
+  { value: 'all', label: '全部' },
+  { value: 'done', label: '已完成' },
+];
+const priorityOptions = [
+  { value: '', label: '全部' },
+  { value: '5', label: '高', dot: '#e13e39' },
+  { value: '3', label: '中', dot: '#faa80c' },
+  { value: '1', label: '低', dot: '#4772fa' },
+  { value: '0', label: '无', dot: 'var(--grey-30)' },
+];
+
+function inTimeRange(t) {
+  if (!rangeStart.value && !rangeEnd.value) return true;
+  if (!t.dueDate) return false;
+  const d = t.dueDate.slice(0, 10);
+  if (rangeStart.value && d < rangeStart.value) return false;
+  if (rangeEnd.value && d > rangeEnd.value) return false;
+  return true;
+}
 
 const tasks = computed(() =>
   store.tasks
     .filter((t) => t.status !== -1)
     .filter((t) => (selectedList.value === 0 ? true : t.projectId === selectedList.value))
-    .filter((t) => (showDone.value ? true : t.status !== 2))
+    .filter((t) => (selectedTag.value ? t.tags.includes(selectedTag.value) : true))
+    .filter(inTimeRange)
+    .filter((t) => {
+      if (statusFilter.value === 'active') return t.status !== 2;
+      if (statusFilter.value === 'done') return t.status === 2;
+      return true;
+    })
+    .filter((t) => (priorityFilter.value === '' ? true : (t.priority || 0) === Number(priorityFilter.value)))
     .sort((a, b) => {
       // 已完成任务沉底，按完成时间倒序（最近完成在前）
       const aDone = a.status === 2 ? 1 : 0;
@@ -29,6 +66,24 @@ const tasks = computed(() =>
       return (a.sortOrder || 0) - (b.sortOrder || 0);
     })
 );
+
+const hasFilter = computed(
+  () =>
+    selectedList.value !== 0 ||
+    selectedTag.value !== '' ||
+    rangeStart.value !== '' ||
+    rangeEnd.value !== '' ||
+    statusFilter.value !== 'active' ||
+    priorityFilter.value !== ''
+);
+function resetFilters() {
+  selectedList.value = 0;
+  selectedTag.value = '';
+  rangeStart.value = '';
+  rangeEnd.value = '';
+  statusFilter.value = 'active';
+  priorityFilter.value = '';
+}
 
 function fmtDue(t) {
   if (!t.dueDate) return '';
@@ -56,21 +111,29 @@ function priColor(p) {
 <template>
   <div class="list-page">
     <aside class="lp-side">
-      <div class="lp-side-title">清单</div>
-      <div
-        v-for="l in lists"
-        :key="l.id"
-        class="lp-side-item"
-        :class="{ active: selectedList === l.id }"
-        @click="selectedList = l.id"
-      >
-        <span v-if="l.emoji" class="lp-emoji">{{ l.emoji }}</span>
-        <Icon v-else name="inbox-list" :size="16" style="margin-right: 6px" />
-        <span class="lp-name">{{ l.name }}</span>
-        <span class="lp-count">
-          {{ l.id === 0 ? store.tasks.filter((t) => t.status === 0).length : store.tasks.filter((t) => t.projectId === l.id && t.status === 0).length }}
-        </span>
+      <div class="lp-filter">
+        <span class="lp-filter-label">清单类型</span>
+        <GlassSelect v-model="selectedList" :options="listOptions" />
       </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">标签</span>
+        <GlassSelect v-model="selectedTag" :options="tagOptions" />
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">时间范围</span>
+        <DatePicker v-model="rangeStart" style="width: 112px" />
+        <span class="lp-range-sep">至</span>
+        <DatePicker v-model="rangeEnd" style="width: 112px" />
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">任务状态</span>
+        <GlassSelect v-model="statusFilter" :options="statusOptions" />
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">优先级</span>
+        <GlassSelect v-model="priorityFilter" :options="priorityOptions" />
+      </div>
+      <button v-if="hasFilter" class="lp-reset" @click="resetFilters">重置</button>
     </aside>
 
     <main class="lp-main">
@@ -80,10 +143,6 @@ function priColor(p) {
           <span class="lp-total">{{ tasks.length }}</span>
         </div>
         <div class="lp-actions">
-          <label class="lp-toggle">
-            <input v-model="showDone" type="checkbox" />
-            显示已完成
-          </label>
           <button class="lp-add" @click="store.quickAdd = { open: true, presetDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()), presetTask: null }">
             <Icon name="add-small" :size="16" /> 添加任务
           </button>
@@ -107,7 +166,7 @@ function priColor(p) {
         </div>
         <div v-if="!tasks.length" class="lp-empty">
           <Icon name="calendar-sidebar" :size="44" />
-          <p>这里空空如也，添加一个任务吧</p>
+          <p>{{ hasFilter ? '没有符合条件的任务' : '这里空空如也，添加一个任务吧' }}</p>
         </div>
       </div>
     </main>
@@ -118,63 +177,59 @@ function priColor(p) {
 .list-page {
   flex: 1;
   display: flex;
+  flex-direction: column;
   overflow: hidden;
   padding: 10px;
   gap: 10px;
 }
 .lp-side {
-  width: 220px;
   flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 16px;
   background: var(--glass-panel-bg);
   -webkit-backdrop-filter: var(--glass-panel-blur);
   backdrop-filter: var(--glass-panel-blur);
   border: 1px solid var(--glass-border-soft);
   border-radius: var(--radius-panel);
   box-shadow: var(--glass-shadow);
-  padding: 14px 8px;
-  overflow-y: auto;
 }
-.lp-side-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--grey-40);
-  padding: 0 10px 8px;
-}
-.lp-side-item {
+.lp-filter {
   display: flex;
   align-items: center;
-  padding: 7px 10px;
-  border-radius: var(--radius-control);
-  cursor: pointer;
-  color: var(--grey-80);
-  font-size: 14px;
-  transition: background 0.2s var(--ease-spring), box-shadow 0.2s var(--ease-spring);
+  gap: 6px;
 }
-.lp-side-item:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-.lp-side-item.active {
-  background: rgba(255, 255, 255, 0.75);
-  box-shadow: inset 0 0 0 1px var(--glass-border), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  color: var(--front-color);
-  font-weight: 500;
-}
-.lp-emoji {
-  margin-right: 6px;
-}
-.lp-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.lp-filter-label {
+  font-size: 12px;
+  color: var(--grey-40);
   white-space: nowrap;
 }
-.lp-count {
+.lp-range-sep {
   font-size: 12px;
-  color: var(--grey-30);
+  color: var(--grey-40);
+}
+.lp-reset {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--grey-60);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-spring);
+}
+.lp-reset:hover {
+  color: var(--warn-red);
+  border-color: var(--warn-red);
+  background: rgba(255, 255, 255, 0.7);
 }
 .lp-main {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   background: var(--glass-panel-bg);
   -webkit-backdrop-filter: var(--glass-panel-blur);
   backdrop-filter: var(--glass-panel-blur);
@@ -206,14 +261,6 @@ function priColor(p) {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.lp-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--grey-60);
-  cursor: pointer;
 }
 .lp-add {
   display: flex;

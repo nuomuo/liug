@@ -25,14 +25,14 @@ python server/app.py
 npm run server --prefix client
 ```
 
-- 主应用：<http://localhost:4300>
-- 用户管理页：<http://localhost:4300/system-admin/>（仅管理员）
+- 主应用：[http://localhost:4300](http://localhost:4300)
+- 用户管理页：[http://localhost:4300/system-admin/](http://localhost:4300/system-admin/)（仅管理员）
 
 ## 三、启动前端
 
 ### 日常使用（无需启动）
 
-后端直接托管 `client/dist/` 构建产物，启动后端后访问 <http://localhost:4300> 即可。
+后端直接托管 `client/dist/` 构建产物，启动后端后访问 [http://localhost:4300](http://localhost:4300) 即可。
 
 ### 开发模式（改前端代码时用，热更新）
 
@@ -40,7 +40,7 @@ npm run server --prefix client
 npm run dev --prefix client
 ```
 
-- 开发服务器：<http://localhost:5180>（`/api` 自动代理到 4300，**需先启动后端**）
+- 开发服务器：[http://localhost:5180](http://localhost:5180)（`/api` 自动代理到 4300，**需先启动后端**）
 
 ### 改完前端代码后发布
 
@@ -48,7 +48,7 @@ npm run dev --prefix client
 npm run build --prefix client
 ```
 
-构建产物输出到 `client/dist/`，刷新 <http://localhost:4300> 即生效。
+构建产物输出到 `client/dist/`，刷新 [http://localhost:4300](http://localhost:4300) 即生效。
 
 ### 用户管理前端（admin-client/，独立 Vue3 程序）
 
