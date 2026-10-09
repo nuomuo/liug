@@ -1,14 +1,17 @@
-﻿# 项目准则（强制遵守）
+# 项目准则（强制遵守）
 
-## 架构说明（前后端分离）
+## 架构说明（前后端分离 + 业务核心下沉）
 
-- 后端为 **Python FastAPI**（`server/`，入口 `server/app.py`），提供 `/api/*` JSON API，并托管 `client/dist`（主应用前端）静态站点。依赖见 `server/requirements.txt`。
+- **业务核心 `core/`（双端共享，不含认证与桌面逻辑）**：`db.py`（每用户 SQLite 数据层：业务表含 `guid`/`updated_at` 列，触发器自动补全与触碰、硬删除写 `_sync_tombstones` 墓碑，老库打开时自动迁移）、`routes.py`（/api/* 业务路由，鉴权通过 `get_user_id` 依赖注入；含 `POST /api/sync` 同步端点）、`sync.py`（同步核心：快照构建 / LWW 合并 / 幂等应用，guid 空间 + FK 重映射 + 拓扑插入）、`app_factory.py`（FastAPI 组装工厂：业务路由 + 认证路由 + 额外路由 + SPA 静态托管）、`auth.py`（scrypt/HMAC 纯函数）、`errors.py`、`holidays.py`、`import_csv.py`。用户数据目录由 `LIUG_USERS_DIR` 指定（惰性解析），静态资源目录由 `LIUG_DIST_DIR` 指定。
+- **远程后端 `server/`（唯一保留用户管理的地方）**：入口 `server/app.py`，组装 core + 账户体系（`users.py` 多用户主库 + `routes_auth.py` 认证路由），托管 `client/dist` 静态站点。依赖见 `server/requirements.txt`。多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`。
 - 前端为 Vue3 + Vite（`client/`），构建产物在 `client/dist/`；前端改动后需 `npm run build --prefix client`。
-- 桌面四象限小组件：`server/desktop_widget.py`（pywebview 无边框透明置顶窗口，加载主应用 `/quadrant` 页面，组件为 `client/src/components/QuadrantWidget.vue`）；优先复用已运行的 4300 主服务，否则内嵌 uvicorn 独立运行，可用 `LIUG_WIDGET_SERVER_URL` 指定服务地址、`LIUG_WIDGET_FORCE_EMBEDDED=1` 强制内嵌。小组件已并入桌面版整应用（无独立打包 spec）。
-- 桌面版整应用：`server/desktop_app.py`（单进程 = 系统托盘 pystray + 主界面窗口 + 可选四象限小组件 + 内嵌 uvicorn，优先 4300 被占则随机端口；Windows 互斥体单实例防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束，右键菜单可开关小组件；应用显示名统一为「流光 LIUG」，对外可见的名称必须使用「流光 LIUG」，不得使用其他名称）。打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；依赖 pystray/pywebview/pillow；冻结模式数据目录为 exe 同级 `data/`、静态资源用 `LIUG_DIST_DIR` 指向 _MEIPASS 内副本，运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
-- 多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。
-- 密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`。
-- 旧 Node 后端备份在 `server-node-backup/`，旧 Flask 管理程序备份在 `system-admin-flask-backup/`，均已退役、不再维护。
+- **桌面客户端 `desktop/`（不含用户管理，账户体系不进 exe）**：`main.py` 为整应用启动器（单进程 = 系统托盘 pystray + 主界面窗口 + 可选四象限小组件 + 内嵌 uvicorn，**粘性动态端口**：上次端口 → 4300 → 随机，socket 预绑定消除竞态，端口记录在 `<data>/service-port.json` 供小组件发现；Windows 互斥体单实例防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束；应用显示名统一为「流光 LIUG」，对外可见的名称必须使用「流光 LIUG」，不得使用其他名称）。认证用 `local_auth.py`：
+  - **单机模式**：`POST /api/auth/local` 免密签发固定 `LOCAL_UID='local'` 会话（TTL 10 年，密钥 `<data>/local.secret`，登出为进程内内存吊销）；业务数据在 `<LIUG_USERS_DIR>/local.db` 单文件；`/api/auth/me` 返回 user 带 `mode='standalone'` 供前端识别。
+  - **云端账号（离线可用 + 双向同步）**：登录页「登录账号（云端同步）」配置服务器地址（`<data>/config.json` 的 remoteUrl，由 `GET/PUT /api/desktop/config` 读写）与账号密码，`POST /api/auth/remote` 由本地服务代理登录远程服务器（WebView 不整页跳转）；远程令牌存 `<data>/remote-session.json`，本地签发 uid=远程用户 ID 的 30 天会话；登录成功即以不播种方式建空镜像库 `<LIUG_USERS_DIR>/<远程ID>.db`（与单机 `local.db` 完全隔离），断网照常使用，`me` 返回 `mode='cloud'`。
+  - **同步引擎 `desktop/sync.py`**（随主服务启动，小组件内嵌模式不启动防双引擎）：本地写操作后前端 fire-and-forget `POST /api/sync/kick`（防抖 3 秒）+ 定时 300 秒 + 设置面板手动「立即同步」`POST /api/sync/run`；协议为 `POST /api/sync` 全量快照 LWW 合并（详见 `core/sync.py`）；状态持久化 `<data>/sync-state.json`，前端 30s 轮询 `GET /api/sync/status`，`lastChangedAt` 前进时自动刷新数据；远程令牌过期报 `expired` 引导重登、断网报 `offline` 恢复后自动补同步，均不影响离线使用。
+  `desktop_widget.py` 为独立小组件启动器（按 `service-port.json` 发现主服务、兜底 4300，否则内嵌 uvicorn 独立运行，可用 `LIUG_WIDGET_SERVER_URL` 指定服务地址、`LIUG_WIDGET_FORCE_EMBEDDED=1` 强制内嵌）。依赖见 `desktop/requirements.txt`。
+- 打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；入口 `desktop/main.py`，`excludes` 显式排除用户管理模块；冻结模式数据目录为 exe 同级 `data/`（`LIUG_DATA_DIR`）、静态资源用 `LIUG_DIST_DIR` 指向 _MEIPASS 内副本，运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
+- 旧 Node 后端与旧 Flask 管理程序均已退役、不再维护（备份目录已从仓库移除）。
 
 ## 数据库隔离（最高优先级）
 
@@ -25,7 +28,7 @@
 LIUG_USERS_DB_PATH=data/users.test.db LIUG_USERS_DIR=data/users-test PORT=4301 python server/app.py
 
 # 测试导入（导入 CLI 仍使用 LIUG_DB_PATH 指定目标库文件）
-LIUG_DB_PATH=data/schedule.test.db python server/import_csv.py <csv路径>
+LIUG_DB_PATH=data/schedule.test.db python core/import_csv.py <csv路径>
 ```
 
 - 测试服务器首次启动会自动在测试用户主库中创建默认管理员 `admin / admin123`。

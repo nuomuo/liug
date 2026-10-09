@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { store, applyTheme, showToast, logout } from '../store.js';
+import { store, applyTheme, showToast, logout, handleSyncStatus } from '../store.js';
 import { api } from '../api.js';
 import Icon from './Icon.vue';
 
@@ -26,16 +26,42 @@ function reset() {
   pick('#484553');
 }
 
-// ---------- 账户：修改密码 / 退出登录 ----------
+// ---------- 账户：修改密码 / 云端同步 / 退出登录 ----------
 const showPwdForm = ref(false);
 const pwdForm = ref({ oldPassword: '', newPassword: '', confirm: '' });
 const pwdError = ref('');
 const pwdSaving = ref(false);
+const syncSaving = ref(false);
 
 const accountName = computed(() => store.user?.username || '未登录');
-const accountRole = computed(() =>
-  store.user ? (store.user.role === 'admin' ? '管理员' : '普通用户') : ''
-);
+const accountRole = computed(() => {
+  if (!store.user) return '';
+  if (store.user.mode === 'standalone') return '单机模式';
+  if (store.user.mode === 'cloud') return '云端账号';
+  return store.user.role === 'admin' ? '管理员' : '普通用户';
+});
+const accountSub = computed(() => {
+  if (store.user?.mode === 'standalone') return '数据仅保存在本机，不同步任何服务器';
+  if (store.user?.mode === 'cloud') return '本地镜像与云端双向同步，断网可用';
+  return '数据独立存储于个人 SQLite 数据库';
+});
+// 单机模式（桌面本地服务，无密码概念）/ 云端账号（密码在远程服务器，本地不可改）
+const isStandalone = computed(() => store.user?.mode === 'standalone');
+const isCloud = computed(() => store.user?.mode === 'cloud');
+
+const syncStateText = computed(() => {
+  const s = store.syncState || {};
+  if (syncSaving.value) return '正在与云端同步…';
+  if (s.lastSyncAt) return '上次同步：' + new Date(s.lastSyncAt).toLocaleString();
+  return '尚未同步';
+});
+const syncErrorText = computed(() => {
+  const s = store.syncState || {};
+  if (!s.lastError) return '';
+  if (s.errorKind === 'expired') return '云端会话已过期，请退出登录后重新登录';
+  if (s.errorKind === 'offline') return '网络不可用，恢复联网后自动同步';
+  return s.lastError;
+});
 
 function togglePwdForm() {
   showPwdForm.value = !showPwdForm.value;
@@ -74,6 +100,28 @@ async function doLogout() {
   await logout();
   showToast('已退出登录');
 }
+
+// 单机模式 → 云端账号：退出单机会话，回到登录页填写服务器地址与账号
+async function gotoCloud() {
+  store.settingsOpen = false;
+  await logout();
+  showToast('请点击「登录账号」填写服务器地址');
+}
+
+// 手动触发一次云端同步（复用轮询逻辑：lastChangedAt 前进时刷新数据）
+async function syncNow() {
+  syncSaving.value = true;
+  try {
+    const s = await api.syncRun();
+    const changed = (s.lastChangedAt || 0) > (store.syncState?.lastChangedAt || 0);
+    await handleSyncStatus(s);
+    if (!changed) showToast('本地与云端已是一致');
+  } catch (e) {
+    showToast(e?.data?.error || '同步失败');
+  } finally {
+    syncSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -84,7 +132,7 @@ async function doLogout() {
           <span class="sp-avatar">{{ (store.user?.username || 'U').slice(0,1).toUpperCase() }}</span>
           <div class="sp-user-info">
             <div class="sp-name">{{ accountName }}</div>
-            <div class="sp-sub">{{ accountRole }} · 数据独立存储于个人 SQLite 数据库</div>
+            <div class="sp-sub">{{ accountRole ? accountRole + ' · ' : '' }}{{ accountSub }}</div>
           </div>
         </div>
         <span class="sp-close" @click="store.settingsOpen = false"><Icon name="close" :size="16" /></span>
@@ -94,12 +142,13 @@ async function doLogout() {
         <div class="sp-section">
           <div class="sp-section-title">账户</div>
           <div class="account-actions">
-            <button class="account-btn" @click="togglePwdForm">
+            <button v-if="isStandalone" class="account-btn" @click="gotoCloud">登录云端账号</button>
+            <button v-if="!isStandalone && !isCloud" class="account-btn" @click="togglePwdForm">
               {{ showPwdForm ? '取消修改' : '修改密码' }}
             </button>
             <button class="account-btn logout" @click="doLogout">退出登录</button>
           </div>
-          <div class="pwd-form" v-if="showPwdForm">
+          <div class="pwd-form" v-if="showPwdForm && !isStandalone">
             <label class="pwd-field">
               <span>原密码</span>
               <input type="password" v-model="pwdForm.oldPassword" autocomplete="current-password" />
@@ -115,6 +164,17 @@ async function doLogout() {
             <div class="pwd-error" v-if="pwdError">{{ pwdError }}</div>
             <button class="pwd-submit" @click="submitPassword" :disabled="pwdSaving">
               {{ pwdSaving ? '保存中…' : '保存新密码' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="sp-section" v-if="isCloud">
+          <div class="sp-section-title">云端同步</div>
+          <div class="sync-state">{{ syncStateText }}</div>
+          <div class="sync-error" v-if="syncErrorText">{{ syncErrorText }}</div>
+          <div class="sync-row">
+            <button class="account-btn" :disabled="syncSaving" @click="syncNow">
+              {{ syncSaving ? '同步中…' : '立即同步' }}
             </button>
           </div>
         </div>
@@ -411,6 +471,26 @@ async function doLogout() {
   filter: brightness(1.06);
 }
 .pwd-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sync-state {
+  font-size: 12px;
+  color: var(--grey-60);
+  margin-top: 10px;
+}
+.sync-error {
+  font-size: 12px;
+  color: #d9544d;
+  background: rgba(217, 84, 77, 0.1);
+  border-radius: var(--radius-control);
+  padding: 7px 10px;
+  margin-top: 8px;
+}
+.sync-row {
+  margin-top: 12px;
+}
+.account-btn:disabled {
   opacity: 0.6;
   cursor: default;
 }

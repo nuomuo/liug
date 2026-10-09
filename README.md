@@ -31,7 +31,8 @@
 
 - 单进程 = 系统托盘（pystray）+ 主界面窗口（pywebview/WebView2）+ 可选桌面小组件 + 内嵌 uvicorn 服务
 - 单实例互斥锁防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束
-- 内嵌服务优先 4300 端口，被占自动换随机端口；数据与日志在 exe 同级 `data/`
+- 内嵌服务使用粘性动态端口（上次端口 → 4300 → 随机，bind 即占有并记录到 `data/service-port.json`），不与其他程序冲突；数据与日志在 exe 同级 `data/`
+- **离线可用 + 云端同步**：登录云端账号后数据保存在本地镜像库，断网照常使用，联网后自动与服务器双向同步（也可在设置面板手动「立即同步」）
 - 登录持久化（WebView2 非隐私模式），重启 exe 免登录
 
 ### 桌面四象限小组件
@@ -61,7 +62,7 @@
 ### 1. 安装依赖
 
 ```powershell
-# 后端依赖（fastapi / uvicorn / httpx / regex / pywebview）
+# 远程后端依赖（fastapi / uvicorn / httpx / regex）
 pip install -r server/requirements.txt
 
 # 前端依赖
@@ -99,16 +100,23 @@ npm run dev --prefix client        # 终端 2：开发服务器 http://localhost
 
 ```powershell
 # 或 CLI（目标库由 LIUG_DB_PATH 指定）
-python server/import_csv.py <备份.csv>
+python core/import_csv.py <备份.csv>
 ```
 
 ## 四、桌面版与打包 exe（Windows）
 
+桌面客户端支持两种使用方式：**单机模式**（免登录——数据仅保存在本机 `<LIUG_USERS_DIR>/local.db`
+单文件，不同步任何服务器，点一次「单机使用」后跨重启免登录）与**云端账号**（登录页「登录账号
+（云端同步）」填写服务器地址与账号密码，由本地服务代理登录；数据保存在本地镜像库
+`<LIUG_USERS_DIR>/<远程用户ID>.db`，**断网照常使用**，联网后自动与服务器双向同步——上传本地
+改动、拉取远端更新，设置面板可查看同步状态并手动「立即同步」；两种模式的数据完全隔离）；
+桌面端**不含用户管理逻辑**（多用户账户体系仅存在于 `server/` 远程后端，不打包进 exe）。
+
 ### 源码运行桌面版
 
 ```powershell
-pip install pystray pillow         # 托盘与图标依赖（pywebview 已含在 requirements.txt）
-python server/desktop_app.py       # 需先执行过 npm run build --prefix client
+pip install -r desktop/requirements.txt    # 含 pywebview / pystray / pillow
+python desktop/main.py                     # 需先执行过 npm run build --prefix client
 ```
 
 ### 打包成单个 liug.exe
@@ -127,10 +135,10 @@ python -m PyInstaller --noconfirm liug.spec
 
 ### 独立小组件（可选）
 
-`server/desktop_widget.py`：只启动四象限小组件的轻量入口（优先复用已运行的 4300 主服务，否则内嵌独立服务）：
+`desktop/desktop_widget.py`：只启动四象限小组件的轻量入口（优先复用已运行的 4300 主服务，否则内嵌独立服务）：
 
 ```powershell
-python server/desktop_widget.py    # 需先执行过 npm run build --prefix client
+python desktop/desktop_widget.py    # 需先执行过 npm run build --prefix client
 ```
 
 ## 五、测试环境（数据隔离）
@@ -158,18 +166,29 @@ $env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路�
 
 ```
 liug/
-├── liug.spec                # PyInstaller 打包配置（桌面版整应用）
+├── liug.spec                # PyInstaller 打包配置（桌面版整应用，入口 desktop/main.py）
 ├── run.md                   # 详细启动/运维指南
-├── server/                  # Python FastAPI 后端
-│   ├── app.py               # 入口：API + 托管 client/dist 静态站点
-│   ├── routes_api.py        # /api/* 路由
-│   ├── db.py                # SQLite 建表与数据访问
-│   ├── users.py             # 多用户账户体系（登录/会话/用户库隔离）
+├── core/                    # 业务核心（远程后端与桌面客户端共享）
+│   ├── app_factory.py       # FastAPI 组装工厂（业务路由 + 认证路由 + 静态托管）
+│   ├── routes.py            # /api/* 业务路由（鉴权依赖注入；含 /api/sync 同步端点）
+│   ├── sync.py              # 同步核心：快照构建 / LWW 合并 / 幂等应用
+│   ├── auth.py              # scrypt 密码 / HMAC 会话纯函数
+│   ├── db.py                # 每用户 SQLite 建表与数据访问（guid/触发器/墓碑）
 │   ├── import_csv.py        # 外部清单 CSV 备份导入（CLI / API）
 │   ├── holidays.py          # 法定节假日
-│   ├── desktop_app.py       # 桌面版整应用（托盘+主窗+小组件+内嵌服务）
+│   └── errors.py            # 统一错误 {"error": 中文}
+├── server/                  # 远程后端（唯一保留用户管理的地方）
+│   ├── app.py               # 入口：组装 core + 账户体系 + 托管 client/dist
+│   ├── users.py             # 多用户账户体系（登录/会话/用户库隔离）
+│   ├── routes_auth.py       # 认证路由（login/logout/me/change-password）
+│   └── requirements.txt
+├── desktop/                 # 桌面客户端（不含用户管理，账户体系不进 exe）
+│   ├── main.py              # 桌面版整应用（托盘+主窗+小组件+内嵌服务，粘性动态端口）
+│   ├── local_auth.py        # 本地认证（单机免登录 + 云端账号代理登录，同 Cookie 契约）
+│   ├── sync.py              # 云端同步引擎（防抖/定时/手动同步 + 状态接口）
 │   ├── desktop_widget.py    # 独立四象限小组件启动器
 │   ├── widget_window.py     # 小组件窗口 Win32 拖动/缩放辅助
+│   ├── assets/liug.ico
 │   └── requirements.txt
 └── client/                  # Vue3 + Vite 前端
     └── src/

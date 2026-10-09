@@ -1,7 +1,7 @@
-"""外部清单应用备份 CSV 导入（口径 1:1 对应原 Node 版 server/import-csv.js）
+r"""外部清单应用备份 CSV 导入（口径 1:1 对应原 Node 版 server/import-csv.js）
 
 - 可作为模块函数被 /api/import 调用，也可独立 CLI 运行
-- CLI 用法：python import_csv.py <备份.csv>（目标库由 LIUG_DB_PATH 指定，默认 data/schedule.db）
+- CLI 用法：python core/import_csv.py <备份.csv>（目标库由 LIUG_DB_PATH 指定，默认 <根>/data/schedule.db）
 - 注：leadingEmoji 的 \p{Extended_Pictographic} 语法需要 regex 第三方包（Python 内置 re 不支持）
 """
 import csv
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import regex as re
 
-from db import open_database_at_path
+from core.db import open_database_at_path
 
 PALETTE = ['#484553', '#ff6161', '#ff9f1a', '#2d8ff0', '#8b6ff0', '#46c793', '#ffb1da', '#9856cd', '#299ba8', '#7cbe1e']
 
@@ -171,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('csv', help='外部清单应用导出的备份 CSV 路径')
     args = parser.parse_args()
 
-    db_path = Path(os.environ.get('LIUG_DB_PATH') or (Path(__file__).resolve().parent.parent / 'data' / 'schedule.db')).resolve()
+    db_path = Path(os.environ.get('LIUG_DB_PATH') or (Path(__file__).resolve().parents[1] / 'data' / 'schedule.db')).resolve()
     conn = open_database_at_path(db_path)
     r = import_csv(conn, args.csv)
     print(f"导入完成: {r['projects']} 个清单, {r['folders']} 个文件夹, {r['tasks']} 条任务")

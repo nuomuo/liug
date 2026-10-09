@@ -1,11 +1,14 @@
-"""桌面四象限小组件启动器（pywebview 无边框透明置顶窗口）
+"""桌面四象限小组件独立启动器（pywebview 无边框透明置顶窗口）
 
-优先复用本机已在运行的主服务（http://localhost:4300），避免双进程同时写 SQLite；
-主服务未运行时在当前进程内嵌一份 uvicorn（127.0.0.1 随机端口）独立工作。
+优先复用本机已在运行的主服务（按 data/service-port.json 发现其粘性端口，兜底 4300），
+避免双进程同时写 SQLite；主服务未运行时在当前进程内嵌一份 uvicorn（127.0.0.1 随机端口）
+独立工作。独立运行时使用本地免登录认证（desktop/local_auth.py 单机模式），不含用户管理逻辑，
+也不启动云端同步引擎（同步由主服务进程负责）。
 
-启动：python server/desktop_widget.py
-测试库：$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_widget.py
+启动：python desktop/desktop_widget.py
+测试：$env:LIUG_DATA_DIR='<临时目录>'; $env:LIUG_USERS_DIR='<临时目录>/users'; python desktop/desktop_widget.py
 """
+import json
 import os
 import socket
 import sys
@@ -15,32 +18,43 @@ from pathlib import Path
 
 import uvicorn
 
-# PyInstaller 冻结模式（quadrant.exe）：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_USERS_DB_PATH / LIUG_USERS_DIR 覆盖）
+# PyInstaller 冻结模式：
+# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('LIUG_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
+    os.environ.setdefault('LIUG_DATA_DIR', str(_EXE_DIR / 'data'))
     os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
     os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
 else:
     _EXE_DIR = None
 
-import users
-from widget_window import MoveSession, ResizeSession
+# 开发模式：让 desktop/ 内模块能找到根目录的 core 包（冻结模式由 PyInstaller pathex 处理）
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from widget_window import MoveSession, ResizeSession  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 MAIN_SERVER = 'http://localhost:4300'
 
-# 与 desktop_app.py 保持同口径：窗口标题（Win32 定位用）与尺寸上下限
+# 与 desktop/main.py 保持同口径：窗口标题（Win32 定位用）与尺寸上下限
 WIDGET_TITLE = '四象限'
 WIDGET_MIN_SIZE = (420, 320)
 WIDGET_MAX_SIZE = (1100, 900)
 
 
+def _data_dir() -> Path:
+    env = os.environ.get('LIUG_DATA_DIR')
+    if env:
+        return Path(env)
+    return (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+
+
 def _dist_version() -> str:
-    """取 client/dist/index.html 的 mtime 作版本号，附加到 URL 破 WebView2 持久缓存（同 desktop_app.py）"""
+    """取 client/dist/index.html 的 mtime 作版本号，附加到 URL 破 WebView2 持久缓存（同 desktop/main.py）"""
     try:
         dist = Path(os.environ.get('LIUG_DIST_DIR') or (BASE_DIR.parent / 'client' / 'dist'))
         return str(int((dist / 'index.html').stat().st_mtime))
@@ -48,11 +62,25 @@ def _dist_version() -> str:
         return '0'
 
 
-def _main_server_alive() -> bool:
+def _main_server_candidates():
+    """主服务候选地址：粘性端口文件（动态端口的主服务）在前，4300 兜底（老版本/默认）"""
+    urls = []
+    try:
+        d = json.loads((_data_dir() / 'service-port.json').read_text(encoding='utf-8'))
+        p = int(d['port'])
+        if 1024 <= p <= 65535:
+            urls.append(f'http://127.0.0.1:{p}')
+    except Exception:
+        pass
+    urls.append(MAIN_SERVER)
+    return urls
+
+
+def _server_alive(base_url: str) -> bool:
     """主服务探活：/api/auth/me 返回 200/401 即视为本应用已在运行（401 = 未登录但服务正常）"""
     try:
         import httpx
-        r = httpx.get(MAIN_SERVER + '/api/auth/me', timeout=0.8)
+        r = httpx.get(base_url + '/api/auth/me', timeout=0.8)
         return r.status_code in (200, 401)
     except Exception:
         return False
@@ -67,8 +95,11 @@ def _free_port() -> int:
 
 
 def _start_embedded_server() -> int:
-    """进程内嵌 uvicorn（随机端口），复用 app.py 的同一份 FastAPI 应用与数据库配置"""
-    from app import app  # 延迟导入：仅独立运行时加载
+    """进程内嵌 uvicorn（随机端口）：core 业务核心 + 本地单用户认证（不含用户管理）"""
+    from core.app_factory import create_app
+    from local_auth import ensure_local_secret, get_user_id, router as auth_router
+    ensure_local_secret()
+    app = create_app(get_user_id, auth_router)
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning'))
     threading.Thread(target=server.run, daemon=True).start()
@@ -133,7 +164,7 @@ class _WidgetApi:
             self._resize.update()
 
     def end_resize(self):
-        """结束拖拽（独立小组件不做几何持久化）"""
+        """结束拖动（独立小组件不做几何持久化）"""
         if self._resize:
             self._resize.end()
             self._resize = None
@@ -143,22 +174,24 @@ def main():
     try:
         import webview
     except ImportError:
-        raise SystemExit('缺少依赖 pywebview，请先执行：pip install pywebview')
+        raise SystemExit('缺少依赖 pywebview，请先执行：python -m pip install -r desktop/requirements.txt')
 
-    # 显式指定服务地址（测试/远程场景）；否则优先复用本机主服务，最后内嵌独立运行
-    # LIUG_WIDGET_FORCE_EMBEDDED=1 可跳过探活强制内嵌（打包验证/数据隔离场景）
+    # 显式指定服务地址（测试/远程场景）；否则优先复用本机主服务（粘性端口文件 → 4300 兜底），
+    # 最后内嵌独立运行；LIUG_WIDGET_FORCE_EMBEDDED=1 可跳过探活强制内嵌（打包验证/数据隔离场景）
     override = os.environ.get('LIUG_WIDGET_SERVER_URL', '').rstrip('/')
     if override:
         base_url = override
         print(f'[widget] 使用指定服务 {base_url}')
-    elif not os.environ.get('LIUG_WIDGET_FORCE_EMBEDDED') and _main_server_alive():
-        base_url = MAIN_SERVER
-        print(f'[widget] 复用已运行的主服务 {MAIN_SERVER}')
+    elif not os.environ.get('LIUG_WIDGET_FORCE_EMBEDDED'):
+        found = next((u for u in _main_server_candidates() if _server_alive(u)), '')
+        if found:
+            base_url = found
+            print(f'[widget] 复用已运行的主服务 {base_url}')
+        else:
+            port = _start_embedded_server()
+            base_url = f'http://127.0.0.1:{port}'
+            print(f'[widget] 内嵌服务已启动 {base_url}')
     else:
-        # 独立运行：初始化用户主库（对齐 app.py 启动流程）后内嵌起服务
-        # 冻结模式下旧单用户库迁移源取 exe 同级 data/schedule.db
-        legacy = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data' / 'schedule.db'
-        users.bootstrap_users(legacy_db_path=legacy)
         port = _start_embedded_server()
         base_url = f'http://127.0.0.1:{port}'
         print(f'[widget] 内嵌服务已启动 {base_url}')

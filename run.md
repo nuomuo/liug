@@ -53,40 +53,29 @@ npm run build --prefix client
 pywebview 无边框透明置顶窗口，加载主应用的 `/quadrant` 页面（需先执行过 `npm run build --prefix client`）：
 
 ```powershell
-python server/desktop_widget.py
+python desktop/desktop_widget.py
 ```
 
-- 主服务（4300）已在运行时直接复用它；未运行则自动内嵌启动一份独立服务，可脱离主程序单独使用
+- 主服务（4300）已在运行时直接复用它；未运行则自动内嵌启动一份独立服务（本地单用户认证），可脱离主程序单独使用
 - 首次使用需在小组件窗口内登录一次（WebView2 会记住登录态）
 - 按住标题栏空白处拖动窗口；标题栏右侧有刷新 / 最小化 / 关闭按钮
-- 依赖 `pywebview`（已列入 requirements.txt，注释行，纯服务端部署可不安）
+- 依赖见 `desktop/requirements.txt`（pywebview / pystray / pillow 等）
 - 浏览器调试地址：主服务启动后访问 [http://localhost:4300/quadrant](http://localhost:4300/quadrant)
-
-### 打包成单个 quadrant.exe
-
-```powershell
-pip install pyinstaller
-python -m PyInstaller --noconfirm quadrant.spec
-# 产物：dist/quadrant.exe（约 38 MB，单文件、无控制台窗口，双击即用）
-```
-
-- 已打包 `client/dist` 静态资源；主服务运行时复用 4300，否则内嵌服务独立运行
-- 独立运行时数据放在 exe 同级 `data/` 目录（与源码运行的 `data/` 互不干扰；也可用 `LIUG_USERS_DB_PATH`/`LIUG_USERS_DIR` 覆盖）
-- 注意：spec 中打包了 conda `Library/bin` 下的 OpenSSL/libffi/sqlite3 等运行时 DLL，换 Python 环境构建时需确认该目录仍存在
 
 ## 五、桌面版整应用（liug.exe）
 
-`server/desktop_app.py`：一个进程搞定全部——系统托盘常驻（pystray）+ 主界面窗口 + 可选桌面小组件 + 内嵌 uvicorn 服务：
+`desktop/main.py`：一个进程搞定全部——系统托盘常驻（pystray）+ 主界面窗口 + 可选桌面小组件 + 内嵌 uvicorn 服务。
+桌面客户端支持**单机模式（免登录）**与**远程账号（云端同步）**两种使用方式（不含用户管理逻辑，账户体系仅在 `server/` 远程后端）：
 
 ```powershell
 # 源码运行（开发模式）
-python server/desktop_app.py
+python desktop/main.py
 
-# 测试库运行
-$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_app.py
+# 测试数据目录（不碰项目 data/ 正式数据）
+$env:LIUG_DATA_DIR='<临时目录>'; $env:LIUG_USERS_DIR='<临时目录>/users'; python desktop/main.py
 
 # 打包成单个 exe（需先 build 过 client）
-pip install pyinstaller pystray pillow
+pip install pyinstaller
 python -m PyInstaller --noconfirm liug.spec
 # 产物：dist/liug.exe（约 42 MB，单文件、无控制台窗口，双击即用）
 ```
@@ -94,10 +83,11 @@ python -m PyInstaller --noconfirm liug.spec
 - **托盘**：双击图标或菜单「打开流光 LIUG」显示主窗口；右键菜单可勾选开关「显示桌面小组件（四象限）」；「退出」彻底结束进程
 - **主窗口点 ×**：仅隐藏到托盘继续驻留（托盘应用惯例），从托盘「退出」才真正退出
 - **单实例**：Windows 互斥体锁，重复双击弹提示「已在运行」
-- **端口**：内嵌服务优先 4300，被其他程序占用时自动换随机端口（对用户透明）
+- **端口**：内嵌服务使用粘性动态端口——上次端口 → 4300 → 随机（socket 预绑定后交给 uvicorn，无竞态窗口），端口记录在 `data/service-port.json` 供小组件发现；端口跳变会导致 WebView localStorage（主题色等）按 origin 隔离而"丢失"，粘性策略保跨重启稳定
 - **数据与日志**：数据目录在 exe 同级 `data/`；运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`（排查 exe 问题先看这两个文件）
-- 首次启动自动创建默认管理员 `admin / admin123`
-- **登录持久化**：WebView2 以非隐私模式运行（`private_mode=False`），cookies/localStorage 落在 exe 同级 `data/webview/`，重启 exe 免登录（除非手动退出登录）；服务端会话有效期 7 天
+- **单机模式（免登录）**：登录页点「单机使用（免登录）」即进入，无账号无密码，数据仅在 `<数据目录>/users/local.db` 单文件，不同步任何服务器；点一次后跨重启免登录（本地会话有效期 10 年，密钥 `<数据目录>/local.secret`）
+- **云端账号（离线可用 + 双向同步）**：登录页「登录账号（云端同步）」填写服务器地址（存 `<数据目录>/config.json`）与账号密码，本地服务代理登录远程服务器（WebView 不整页跳转）；数据保存在本地镜像库 `<数据目录>/users/<远程用户ID>.db`，**断网照常使用**；联网后由同步引擎自动双向同步（本地写后防抖 3 秒 + 每 5 分钟定时 + 设置面板手动「立即同步」），LWW 合并（新者胜）；远程令牌存 `<数据目录>/remote-session.json`，过期后设置面板提示重新登录（不影响离线使用），同步状态存 `<数据目录>/sync-state.json`
+- **登录持久化**：WebView2 以非隐私模式运行（`private_mode=False`），cookies/localStorage 落在 exe 同级 `data/webview/`，重启 exe 免登录（除非手动退出登录）；单机会话 10 年、云端本地会话 30 天（远程令牌 7 天，过期仅影响同步）
 - **桌面小组件**（无边框透明窗口，`/quadrant` 页面）：
   - 未登录：显示「请先登录」提示卡，点击打开主界面窗口登录；主界面登录成功后小组件**立即**刷新（storage 事件 `liug-sync` 打点，30s 轮询仅兜底）
   - 缩放：标题栏 −/＋ 按钮或 **Ctrl+滚轮**（420×320 ~ 1100×900）
@@ -115,7 +105,7 @@ $env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-te
 # 访问 http://localhost:4301
 
 # 导入外部清单应用备份 CSV 到测试库
-$env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路径>
+$env:LIUG_DB_PATH='data/schedule.test.db'; python core/import_csv.py <csv路径>
 ```
 
 用完记得清掉环境变量（`Remove-Item Env:LIUG_USERS_DB_PATH` 等）或直接关闭该终端，避免下次误连测试库。

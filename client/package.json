@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "server": "python ../server/app.py",
     "start": "python ../server/app.py",
-    "import": "python ../server/import_csv.py"
+    "import": "python ../core/import_csv.py"
   },
   "dependencies": {
     "lunar-javascript": "^1.7.3",

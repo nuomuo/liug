@@ -1,21 +1,27 @@
-"""/api/* 业务路由（口径 1:1 对应原 Node 版 server/index.js）"""
+"""共享业务路由 /api/*（鉴权无关：get_user_id 依赖在 create_app 组装时被覆盖）
+
+包含：bootstrap、tasks / projects / countdowns 的 CRUD、search、CSV 导入、reset、sync（离线同步）、holidays（免登录）。
+认证端点（login / logout / me / change-password）不在此处——
+服务端（账户体系版，见 server/routes_auth.py）与桌面端（本地单用户版，见 desktop/local_auth.py）各自提供，
+两边契约一致（cookie 名、响应形状），前端因此无需区分。
+"""
 import re
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Body, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends
 
-import db
-import holidays
-import users
-from errors import ApiError
-from import_csv import import_csv
+from core.db import user_db_ctx, ensure_default_data
+from core.errors import ApiError
+from core.holidays import get_holidays
+from core.import_csv import import_csv
+from core.sync import apply_snapshot, build_snapshot, merge_snapshots
 
 router = APIRouter(prefix='/api')
 
-SESSION_COOKIE = users.SESSION_COOKIE
-SECRET = users.SECRET
-SESSION_MAX_AGE = users.SESSION_TTL
+
+def get_user_id() -> str:
+    """占位依赖：由 create_app 调用方通过 app.dependency_overrides 注入真实实现（返回已认证用户的库 ID）"""
+    raise ApiError(503, '鉴权未配置')
 
 
 def _beijing_now_iso():
@@ -84,74 +90,6 @@ def countdown_to_json(row):
     }
 
 
-# ---------- 鉴权依赖（对应 Express 的 /api 中间件） ----------
-def get_auth(request: Request):
-    """除 /api/auth/login 与 /api/holidays 外的所有 /api/* 都需要有效会话"""
-    token = request.cookies.get(SESSION_COOKIE)
-    session = users.verify_session_token(token, SECRET)
-    if not session:
-        raise ApiError(401, '未登录或会话已过期')
-    user = users.find_user_by_id(session['uid'])
-    if not user:
-        raise ApiError(401, '账户不存在')
-    if user['disabled']:
-        raise ApiError(403, '账户已被禁用')
-    # 已登出吊销的令牌 / 修改密码之前的旧令牌一律失效（iat 严格小于 sessions_since 才算旧）
-    if users.is_session_revoked(token) or (user['sessions_since'] or 0) > session['iat']:
-        raise ApiError(401, '会话已失效，请重新登录')
-    return {'user': user, 'token': token}
-
-
-def _set_session_cookie(resp, user_id):
-    resp.set_cookie(
-        SESSION_COOKIE, users.sign_session(user_id, SECRET),
-        path='/', httponly=True, samesite='lax', max_age=SESSION_MAX_AGE,
-    )
-
-
-# ---------- 认证 ----------
-@router.post('/auth/login')
-def login(payload: dict = Body(default={})):
-    user = users.find_user_by_username(payload.get('username'))
-    if not user or not users.verify_password(payload.get('password'), user['password_hash']):
-        raise ApiError(401, '用户名或密码错误')
-    if user['disabled']:
-        raise ApiError(403, '账户已被禁用，请联系管理员')
-    resp = JSONResponse({'user': users.public_user(user)})
-    _set_session_cookie(resp, user['id'])
-    return resp
-
-
-@router.post('/auth/logout')
-def logout(request: Request):
-    # 服务端吊销当前令牌（即使客户端保留 cookie 也无法继续使用）
-    users.revoke_session(request.cookies.get(SESSION_COOKIE), SECRET)
-    resp = JSONResponse({'ok': True})
-    resp.delete_cookie(SESSION_COOKIE, path='/', httponly=True, samesite='lax')
-    return resp
-
-
-@router.get('/auth/me')
-def me(auth: dict = Depends(get_auth)):
-    return {'user': users.public_user(auth['user'])}
-
-
-@router.post('/auth/change-password')
-def change_password(payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
-    user = auth['user']
-    if not users.verify_password(payload.get('oldPassword'), user['password_hash']):
-        raise ApiError(400, '原密码错误')
-    new_password = payload.get('newPassword')
-    if not isinstance(new_password, str) or len(new_password) < 6:
-        raise ApiError(400, '新密码至少需要 6 个字符')
-    users.update_password_hash(user['id'], users.hash_password(new_password))
-    users.revoke_all_sessions(user['id'])
-    # 重新签发当前会话，避免改密后立刻被踢出
-    resp = JSONResponse({'ok': True})
-    _set_session_cookie(resp, user['id'])
-    return resp
-
-
 # ---------- 官方节假日（公共数据，无需登录） ----------
 @router.get('/holidays')
 async def holidays_endpoint(year: str = ''):
@@ -162,15 +100,15 @@ async def holidays_endpoint(year: str = ''):
     if y < 2007 or y > 2100:
         raise ApiError(400, '年份需在 2007-2100 之间')
     try:
-        return await holidays.get_holidays(y)
+        return await get_holidays(y)
     except Exception as e:
         raise ApiError(502, '获取节假日数据失败：' + (str(e) or '未知错误'))
 
 
 # ---------- bootstrap ----------
 @router.get('/bootstrap')
-def bootstrap(auth: dict = Depends(get_auth)):
-    with db.user_db_ctx(auth['user']['id']) as conn:
+def bootstrap(uid: str = Depends(get_user_id)):
+    with user_db_ctx(uid) as conn:
         folders = [folder_to_json(r) for r in conn.execute('SELECT * FROM folders ORDER BY id').fetchall()]
         projects = [project_to_json(r) for r in conn.execute(
             'SELECT * FROM projects WHERE is_deleted = 0 ORDER BY sort_order, id').fetchall()]
@@ -185,8 +123,8 @@ def bootstrap(auth: dict = Depends(get_auth)):
 
 # ---------- tasks ----------
 @router.get('/tasks')
-def list_tasks(auth: dict = Depends(get_auth)):
-    with db.user_db_ctx(auth['user']['id']) as conn:
+def list_tasks(uid: str = Depends(get_user_id)):
+    with user_db_ctx(uid) as conn:
         rows = conn.execute('SELECT * FROM tasks WHERE is_deleted = 0 ORDER BY sort_order, id').fetchall()
     return [task_to_json(r) for r in rows]
 
@@ -212,7 +150,7 @@ TASK_FIELDS = {
 
 
 @router.post('/tasks')
-def create_task(payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def create_task(payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     b = payload
 
     def or_default(v, default):
@@ -223,7 +161,7 @@ def create_task(payload: dict = Body(default={}), auth: dict = Depends(get_auth)
         tags = ','.join(str(t) for t in tags)
     elif tags is None:
         tags = ''
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         min_order = conn.execute(
             'SELECT COALESCE(MIN(sort_order), 0) AS m FROM tasks WHERE is_deleted = 0'
         ).fetchone()['m']
@@ -256,9 +194,9 @@ def create_task(payload: dict = Body(default={}), auth: dict = Depends(get_auth)
 
 
 @router.put('/tasks/{task_id}')
-def update_task(task_id: str, payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def update_task(task_id: str, payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     id_ = int(task_id)  # 非数字 id 让异常自然抛出为 500（对齐 Node Number() 绑定语义）
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         if not conn.execute('SELECT * FROM tasks WHERE id = ?', (id_,)).fetchone():
             raise ApiError(404, 'task not found')
         sets, params = [], {}
@@ -279,9 +217,9 @@ def update_task(task_id: str, payload: dict = Body(default={}), auth: dict = Dep
 
 
 @router.delete('/tasks/{task_id}')
-def delete_task(task_id: str, auth: dict = Depends(get_auth)):
+def delete_task(task_id: str, uid: str = Depends(get_user_id)):
     id_ = int(task_id)
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         # 软删除自身及其直接子任务（孙级不动，对齐 Node 版）
         conn.execute('UPDATE tasks SET is_deleted = 1 WHERE id = ? OR parent_id = ?', (id_, id_))
     return {'ok': True}
@@ -289,9 +227,9 @@ def delete_task(task_id: str, auth: dict = Depends(get_auth)):
 
 # ---------- projects ----------
 @router.post('/projects')
-def create_project(payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def create_project(payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     b = payload
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         max_order = conn.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM projects').fetchone()['m']
         cur = conn.execute(
             'INSERT INTO projects (name, color, emoji, kind, folder_id, sort_order) VALUES (?,?,?,?,?,?)',
@@ -309,10 +247,10 @@ def create_project(payload: dict = Body(default={}), auth: dict = Depends(get_au
 
 
 @router.put('/projects/{project_id}')
-def update_project(project_id: str, payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def update_project(project_id: str, payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     id_ = int(project_id)
     b = payload
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         sets, params = [], {'id': id_}
         for k, col in (('name', 'name'), ('color', 'color'), ('emoji', 'emoji'), ('folderId', 'folder_id')):
             if k in b:
@@ -326,11 +264,11 @@ def update_project(project_id: str, payload: dict = Body(default={}), auth: dict
 
 
 @router.delete('/projects/{project_id}')
-def delete_project(project_id: str, auth: dict = Depends(get_auth)):
+def delete_project(project_id: str, uid: str = Depends(get_user_id)):
     id_ = int(project_id)
     if id_ == 1:
         raise ApiError(400, '收集箱不可删除')
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         conn.execute('UPDATE projects SET is_deleted = 1 WHERE id = ?', (id_,))
         conn.execute('UPDATE tasks SET is_deleted = 1 WHERE project_id = ?', (id_,))
     return {'ok': True}
@@ -338,12 +276,12 @@ def delete_project(project_id: str, auth: dict = Depends(get_auth)):
 
 # ---------- search ----------
 @router.get('/search')
-def search(q: str = '', auth: dict = Depends(get_auth)):
+def search(q: str = '', uid: str = Depends(get_user_id)):
     query = str(q or '').strip()
     if not query:
         return {'tasks': []}
     like = f"%{re.sub(r'[%_]', '', query)}%"
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         rows = conn.execute(
             'SELECT * FROM tasks WHERE is_deleted = 0 AND (title LIKE ? OR content LIKE ? OR tags LIKE ?)'
             ' ORDER BY due_date IS NULL, due_date LIMIT 200',
@@ -354,9 +292,9 @@ def search(q: str = '', auth: dict = Depends(get_auth)):
 
 # ---------- countdowns ----------
 @router.post('/countdowns')
-def create_countdown(payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def create_countdown(payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     b = payload
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         max_order = conn.execute('SELECT COALESCE(MAX(sort_order), 0) AS m FROM countdowns').fetchone()['m']
         cur = conn.execute(
             'INSERT INTO countdowns (title, type, date, is_lunar, repeat_yearly, pinned, sort_order) VALUES (?,?,?,?,?,?,?)',
@@ -375,13 +313,13 @@ def create_countdown(payload: dict = Body(default={}), auth: dict = Depends(get_
 
 
 @router.put('/countdowns/{cd_id}')
-def update_countdown(cd_id: str, payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def update_countdown(cd_id: str, payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     id_ = int(cd_id)
     fields = {
         'title': 'title', 'type': 'type', 'date': 'date', 'isLunar': 'is_lunar',
         'repeatYearly': 'repeat_yearly', 'pinned': 'pinned', 'sortOrder': 'sort_order',
     }
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         if not conn.execute('SELECT * FROM countdowns WHERE id = ?', (id_,)).fetchone():
             raise ApiError(404, 'countdown not found')
         sets, params = [], {'id': id_}
@@ -399,21 +337,21 @@ def update_countdown(cd_id: str, payload: dict = Body(default={}), auth: dict = 
 
 
 @router.delete('/countdowns/{cd_id}')
-def delete_countdown(cd_id: str, auth: dict = Depends(get_auth)):
+def delete_countdown(cd_id: str, uid: str = Depends(get_user_id)):
     id_ = int(cd_id)
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         conn.execute('UPDATE countdowns SET is_deleted = 1 WHERE id = ?', (id_,))
     return {'ok': True}
 
 
 # ---------- import ----------
 @router.post('/import')
-def import_endpoint(payload: dict = Body(default={}), auth: dict = Depends(get_auth)):
+def import_endpoint(payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
     csv_path = payload.get('csvPath')
     if not csv_path:
         raise ApiError(400, 'csvPath required')
     try:
-        with db.user_db_ctx(auth['user']['id']) as conn:
+        with user_db_ctx(uid) as conn:
             return import_csv(conn, csv_path)
     except ApiError:
         raise
@@ -421,12 +359,25 @@ def import_endpoint(payload: dict = Body(default={}), auth: dict = Depends(get_a
         raise ApiError(500, str(e) or '导入失败')
 
 
+# ---------- sync（离线同步协议，双端共享；详见 core/sync.py 模块注释） ----------
+@router.post('/sync')
+def sync_endpoint(payload: dict = Body(default={}), uid: str = Depends(get_user_id)):
+    client_snap = payload.get('snapshot')
+    if not isinstance(client_snap, dict) or any(k not in client_snap for k in ('folders', 'projects', 'tasks', 'countdowns')):
+        raise ApiError(400, 'snapshot required')
+    with user_db_ctx(uid) as conn:
+        server_snap = build_snapshot(conn)
+        merged = merge_snapshots(server_snap, client_snap)  # tie 保留服务端侧，避免推回循环
+        changed = apply_snapshot(conn, merged, server_snap)
+    return {'snapshot': merged, 'changed': changed}
+
+
 # ---------- reset ----------
 @router.post('/reset')
-def reset(auth: dict = Depends(get_auth)):
+def reset(uid: str = Depends(get_user_id)):
     # 重置当前用户自己的数据（不影响其他用户）；countdowns 不重置，对齐 Node 版
-    with db.user_db_ctx(auth['user']['id']) as conn:
+    with user_db_ctx(uid) as conn:
         for table in ('tasks', 'projects', 'folders'):
             conn.execute(f'DELETE FROM {table}')
-        db.ensure_default_data(conn)
+        ensure_default_data(conn)
     return {'ok': True}

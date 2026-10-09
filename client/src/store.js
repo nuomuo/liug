@@ -4,8 +4,11 @@ import { api, setUnauthorizedHandler } from './api.js';
 export const store = reactive({
   // 认证状态
   authReady: false, // 是否已完成首次会话检查
-  user: null, // 当前登录用户 { id, username, role }
+  user: null, // 当前登录用户 { id, username, role, mode? }
   loginError: '',
+
+  // 云端同步状态（桌面端云端账号；{ enabled, syncing, lastSyncAt, lastChangedAt, lastError, errorKind }）
+  syncState: { enabled: false, lastSyncAt: 0, lastChangedAt: 0, lastError: '', errorKind: '' },
 
   loading: true,
   projects: [],
@@ -65,7 +68,10 @@ export async function checkAuth() {
   try {
     const { user } = await api.me();
     store.user = user;
-    if (user) await loadBootstrap();
+    if (user) {
+      await loadBootstrap();
+      if (user.mode === 'cloud') startSyncPolling(); // 云端账号：启动同步状态轮询
+    }
   } catch {
     store.user = null;
   } finally {
@@ -87,11 +93,44 @@ export async function login(username, password) {
   }
 }
 
+/** 进入单机模式（仅桌面本地服务有效）：免密建会话后直接使用本地数据 */
+export async function loginLocal() {
+  store.loginError = '';
+  try {
+    const { user } = await api.loginLocal();
+    store.user = user;
+    await loadBootstrap();
+    notifySync();
+    return true;
+  } catch (e) {
+    store.loginError = e?.data?.error || '进入单机模式失败';
+    return false;
+  }
+}
+
+/** 登录云端账号（仅桌面本地服务有效）：本地代理登录，数据落在本地镜像库并双向同步 */
+export async function loginRemote(remoteUrl, username, password) {
+  store.loginError = '';
+  try {
+    const { user } = await api.loginRemote(remoteUrl, username, password);
+    store.user = user;
+    await loadBootstrap(); // 镜像库当前内容（首次登录初始同步完成后由轮询自动刷新）
+    notifySync();
+    startSyncPolling();
+    return true;
+  } catch (e) {
+    store.loginError = e?.data?.error || '登录失败，请检查服务器地址与账号';
+    return false;
+  }
+}
+
 export async function logout() {
   try {
     await api.logout();
   } catch {}
   store.user = null;
+  store.syncState = { enabled: false, lastSyncAt: 0, lastChangedAt: 0, lastError: '', errorKind: '' };
+  stopSyncPolling();
   clearUserData();
   notifySync(); // 通知桌面小组件窗口：已登出，回到登录提示
 }
@@ -99,9 +138,44 @@ export async function logout() {
 /** 会话中途失效（API 返回 401）：回到登录页 */
 setUnauthorizedHandler(() => {
   store.user = null;
+  stopSyncPolling();
   clearUserData();
   showToast('登录状态已失效，请重新登录');
 });
+
+// ---------- 云端同步状态轮询（桌面端云端账号） ----------
+let syncTimer = null;
+let lastSeenChangedAt = 0;
+
+export function startSyncPolling() {
+  stopSyncPolling();
+  api.syncStatus().then((s) => handleSyncStatus(s, true)).catch(() => {});
+  syncTimer = setInterval(() => api.syncStatus().then(handleSyncStatus).catch(() => {}), 30000);
+}
+
+export function stopSyncPolling() {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+  }
+}
+
+export async function handleSyncStatus(s, initial = false) {
+  store.syncState = s;
+  if (initial) {
+    lastSeenChangedAt = s.lastChangedAt || 0; // 基线：仅记录，不触发刷新
+    return;
+  }
+  // 远端变更落到本地镜像（lastChangedAt 前进）→ 刷新数据并通知小组件
+  if (s.lastChangedAt && s.lastChangedAt > lastSeenChangedAt) {
+    lastSeenChangedAt = s.lastChangedAt;
+    await loadBootstrap();
+    notifySync();
+    showToast('云端数据已同步');
+  } else {
+    lastSeenChangedAt = s.lastChangedAt || 0;
+  }
+}
 
 export async function loadBootstrap() {
   const data = await api.bootstrap();
@@ -217,13 +291,15 @@ export function placeDropdown(menuEl, triggerEl, opts = {}) {
 // ---------- 跨窗口实时同步（主界面 ↔ 桌面小组件） ----------
 const SYNC_KEY = 'liug-sync';
 
-/** 本窗口数据/登录态变化后打点：同源的其他窗口（桌面小组件/主界面）通过 storage 事件感知并刷新 */
+/** 本窗口数据/登录态变化后打点：同源的其他窗口（桌面小组件/主界面）通过 storage 事件感知并刷新；
+ *  同时 fire-and-forget 通知本地同步引擎（桌面云端账号，变更后防抖自动同步） */
 export function notifySync() {
   try {
     localStorage.setItem(SYNC_KEY, String(Date.now()));
   } catch {
     /* localStorage 不可用时静默降级为轮询同步 */
   }
+  api.syncKick();
 }
 
 // ---------- 任务操作 ----------

@@ -1,14 +1,23 @@
 """流光 LIUG 桌面版启动器（系统托盘 + 主界面窗口 + 可选桌面四象限小组件）
 
+本目录为桌面客户端外壳，**不包含用户管理逻辑**（账户体系仅在 server/ 远程后端）：
+- 单机模式：免登录（desktop/local_auth.py 的 /api/auth/local 免密签发会话），
+  业务数据在 <LIUG_USERS_DIR>/local.db 单文件中；
+- 云端账号：本地服务代理登录远程服务器（/api/auth/remote），数据落在本地镜像库
+  <LIUG_USERS_DIR>/<远程用户ID>.db（断网可用），联网后由 desktop/sync.py 与服务端
+  双向同步（自动 + 手动）；两种模式的数据完全独立；
+- 业务核心复用 core/（与远程后端同一份代码）。
+
 一个进程搞定全部：
-- 内嵌 uvicorn 服务（优先 4300，被占用则自动换随机端口），托管主应用前端与 API；
+- 内嵌 uvicorn 服务（粘性动态端口：上次端口 → 4300 → 随机，bind 即占有并记录到
+  data/service-port.json 供小组件发现），托管主应用前端与 API；
 - 系统托盘常驻（pystray）：双击图标或菜单「打开流光 LIUG」显示主窗口，右键菜单可开关
   「桌面小组件（四象限）」，「退出」彻底结束进程；
 - 主窗口点 × 仅隐藏到托盘（托盘应用惯例），从托盘「退出」才真正退出；
 - Windows 互斥体单实例锁，重复启动弹提示退出，避免双进程写 SQLite。
 
-启动：python server/desktop_app.py
-测试库：$env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; python server/desktop_app.py
+启动：python desktop/main.py
+测试数据目录：$env:LIUG_DATA_DIR='<临时目录>'; $env:LIUG_USERS_DIR='<临时目录>/users'; python desktop/main.py
 打包：python -m PyInstaller --noconfirm liug.spec（产物 dist/liug.exe）
 """
 import json
@@ -22,12 +31,12 @@ from pathlib import Path
 import uvicorn
 
 # PyInstaller 冻结模式（liug.exe）：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_USERS_DB_PATH / LIUG_USERS_DIR 覆盖）
+# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('LIUG_USERS_DB_PATH', str(_EXE_DIR / 'data' / 'users.db'))
+    os.environ.setdefault('LIUG_DATA_DIR', str(_EXE_DIR / 'data'))
     os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
     os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
     # 无控制台模式（console=False）下 sys.stdout/stderr 为 None，
@@ -43,8 +52,12 @@ if getattr(sys, 'frozen', False):
 else:
     _EXE_DIR = None
 
-import users
-from widget_window import MoveSession, ResizeSession
+# 开发模式：让 desktop/ 内模块能找到根目录的 core 包（冻结模式由 PyInstaller pathex 处理）
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from widget_window import MoveSession, ResizeSession  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_NAME = '流光'
@@ -61,6 +74,9 @@ _state = {'main': None, 'widget': None, 'widget_api': None, 'icon': None, 'serve
 
 
 def _data_dir() -> Path:
+    env = os.environ.get('LIUG_DATA_DIR')
+    if env:
+        return Path(env)
     return (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
 
 
@@ -146,7 +162,7 @@ def _log(msg: str) -> None:
     line = f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] {msg}'
     print(line)
     try:
-        log_dir = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+        log_dir = _data_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
         with open(log_dir / 'desktop.log', 'a', encoding='utf-8') as f:
             f.write(line + '\n')
@@ -179,21 +195,38 @@ def _acquire_single_instance() -> bool:
     return True
 
 
-def _port_free(port: int) -> bool:
-    with socket.socket() as s:
-        try:
-            s.bind(('127.0.0.1', port))
-            return True
-        except OSError:
-            return False
+def _service_port_file() -> Path:
+    """粘性端口记录文件（data/service-port.json）：小组件据此发现主服务"""
+    return _data_dir() / 'service-port.json'
 
 
-def _free_port() -> int:
+def _load_saved_port() -> int:
+    try:
+        d = json.loads(_service_port_file().read_text(encoding='utf-8'))
+        p = int(d['port'])
+        return p if 1024 <= p <= 65535 else 0
+    except Exception:
+        return 0
+
+
+def _bind_service_socket() -> socket.socket:
+    """绑定服务端口（粘性策略：上次端口 → 4300 → 随机）
+
+    直接以 socket bind 占有端口后交给 uvicorn（serve(sockets=...)），消除
+    「探测可用与实际监听之间被其他程序抢占」的竞态窗口。粘性策略保端口跨重启稳定，
+    WebView 的 localStorage（主题色等）按 origin 隔离，端口跳变会导致数据"丢失"。
+    """
+    for port in (_load_saved_port(), PREFERRED_PORT):
+        if port:
+            try:
+                s = socket.socket()
+                s.bind(('127.0.0.1', port))
+                return s
+            except OSError:
+                continue
     s = socket.socket()
-    s.bind(('127.0.0.1', 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    s.bind(('127.0.0.1', 0))  # 系统分配随机可用端口
+    return s
 
 
 def _wait_ready(base_url: str, timeout: float = 15.0) -> None:
@@ -210,12 +243,30 @@ def _wait_ready(base_url: str, timeout: float = 15.0) -> None:
     raise RuntimeError('内嵌服务启动超时')
 
 
+def _build_app():
+    """组装桌面端 FastAPI 应用：core 业务核心 + 本地认证（单机/云端）+ 云端同步引擎"""
+    from core.app_factory import create_app
+    from local_auth import get_user_id, router as auth_router
+    from sync import init_engine, router as sync_router
+    # extra_routers 在 SPA catch-all 之前注册（后 include 的 GET 会被 fallback 吞掉）
+    app = create_app(get_user_id, auth_router, extra_routers=[sync_router])
+    init_engine(_data_dir()).start()  # 同步引擎随主服务启动（云端账号登录后生效）
+    return app
+
+
 def _start_server():
-    """内嵌 uvicorn（优先 4300，被其他程序占用则换随机端口），返回 (server, base_url)"""
-    from app import app  # 延迟导入：与源码运行 server/app.py 同一份 FastAPI 应用
-    port = PREFERRED_PORT if _port_free(PREFERRED_PORT) else _free_port()
+    """内嵌 uvicorn（粘性动态端口：上次端口 → 4300 → 随机，bind 即占有），返回 (server, base_url)"""
+    app = _build_app()
+    sock = _bind_service_socket()
+    port = sock.getsockname()[1]
+    try:
+        _data_dir().mkdir(parents=True, exist_ok=True)
+        _service_port_file().write_text(json.dumps({'port': port, 'pid': os.getpid()}), encoding='utf-8')
+    except Exception:
+        pass
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='warning'))
-    threading.Thread(target=server.run, daemon=True, name='uvicorn').start()
+    # server.run 为同步入口（内部 asyncio.run(serve())）；serve() 本身是协程，不能直接做线程 target
+    threading.Thread(target=server.run, kwargs={'sockets': [sock]}, daemon=True, name='uvicorn').start()
     base_url = f'http://127.0.0.1:{port}'
     _wait_ready(base_url)
     return server, base_url
@@ -481,7 +532,7 @@ def main():
         import webview
         import pystray
     except ImportError as e:
-        raise SystemExit(f'缺少依赖 {e.name}，请先执行：python -m pip install pywebview pystray pillow')
+        raise SystemExit(f'缺少依赖 {e.name}，请先执行：python -m pip install -r desktop/requirements.txt')
 
     _install_excepthooks()
     _log(f'启动（pid={os.getpid()} frozen={bool(_EXE_DIR)}）')
@@ -490,11 +541,11 @@ def main():
         _log('已有实例在运行，本次启动退出')
         return
 
-    # 初始化用户主库（全新空库自动创建 admin/admin123；冻结模式数据目录为 exe 同级 data/）
-    legacy = (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data' / 'schedule.db'
-    if not _EXE_DIR and not os.environ.get('LIUG_USERS_DB_PATH'):
-        print('[desktop] 提示：开发模式未设置 LIUG_USERS_DB_PATH，将使用项目数据目录 data/（正式库）')
-    users.bootstrap_users(legacy_db_path=legacy)
+    # 初始化本地会话密钥（单机免登录，无账户；不含任何用户管理逻辑）
+    if not _EXE_DIR and not os.environ.get('LIUG_DATA_DIR'):
+        print('[desktop] 提示：开发模式未设置 LIUG_DATA_DIR，将使用项目数据目录 data/（单机数据 local.db）')
+    from local_auth import ensure_local_secret
+    ensure_local_secret()
 
     server, base_url = _start_server()
     _state['server'] = server

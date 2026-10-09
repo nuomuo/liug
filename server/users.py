@@ -1,21 +1,24 @@
-"""用户主库（账户/密码/角色）+ 会话机制（口径 1:1 对应原 Node 版 server/users.js）
+"""用户主库（账户/密码/角色）+ 会话机制（仅服务端持有；桌面 exe 不打包本模块）
 
-- 密码：scrypt$<hex盐>$<hex哈希>，与 Node crypto.scryptSync 互通（盐为 hex 字符串直接作 bytes）
-- 会话：HMAC-SHA256 签名的 base64url 无状态令牌 + revoked_sessions 吊销表 + sessions_since 批量失效
+- 密码 scrypt、会话 HMAC 令牌等纯函数复用 core/auth.py
 - 会话密钥：主应用复用 <用户主库>.secret（沿用旧 Node 后端密钥文件，已有登录态迁移后不失效）
+- 首次启动 bootstrap：默认 admin/admin123 + 旧单用户库只读迁移（VACUUM INTO，不改原文件）
 """
-import base64
-import hashlib
-import hmac
-import json
 import os
-import secrets
 import sqlite3
 import time
 import uuid
 from pathlib import Path
 
-import db
+from core import db
+from core.auth import (
+    SESSION_TTL,
+    hash_password,
+    sign_session as _sign_session,
+    token_sig,
+    verify_password,
+    verify_session_token as _verify_token,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent / 'data'
@@ -24,8 +27,7 @@ DATA_DIR = BASE_DIR.parent / 'data'
 USERS_DB_PATH = Path(os.environ.get('LIUG_USERS_DB_PATH') or (DATA_DIR / 'users.db')).resolve()
 
 SESSION_COOKIE = 'liug_session'
-SESSION_TTL = 7 * 24 * 3600  # 7 天（秒）
-SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_DKLEN = 16384, 8, 1, 64  # 与 Node crypto.scryptSync 默认参数一致
+SESSION_TTL = SESSION_TTL
 
 
 def _connect():
@@ -65,92 +67,42 @@ def init_users_db():
         conn.close()
 
 
-# ---------- 密码哈希（与 Node scrypt$salt$hash 格式互通） ----------
-def hash_password(password):
-    salt = secrets.token_hex(16)
-    digest = hashlib.scrypt(
-        str(password).encode('utf-8'),
-        salt=salt.encode('utf-8'),
-        n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN,
-        maxmem=64 * 1024 * 1024,
-    ).hex()
-    return f'scrypt${salt}${digest}'
-
-
-def verify_password(password, stored):
-    try:
-        scheme, salt, digest = str(stored or '').split('$')
-        if scheme != 'scrypt' or not salt or not digest:
-            return False
-        test = hashlib.scrypt(
-            str(password).encode('utf-8'),
-            salt=salt.encode('utf-8'),
-            n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN,
-            maxmem=64 * 1024 * 1024,
-        ).hex()
-        return hmac.compare_digest(test, digest)
-    except Exception:
-        return False
-
-
-# ---------- 会话令牌（HMAC 签名 Cookie，格式与 Node 版互通） ----------
+# ---------- 会话令牌（密钥 = users.db.secret，格式与桌面本地端 / 旧 Node 版一致） ----------
 def _load_secret(suffix):
     p = Path(str(USERS_DB_PATH) + suffix)
     if p.exists():
         return p.read_text(encoding='utf-8').strip()
-    s = secrets.token_hex(32)
+    s = secrets_hex()
     p.write_text(s, encoding='utf-8')
     return s
+
+
+def secrets_hex():
+    import secrets as _s
+    return _s.token_hex(32)
 
 
 # 主应用会话密钥：与旧 Node 后端共用同一文件（users.db.secret），保证已有登录态不失效
 SECRET = _load_secret('.secret')
 
 
-def _base64url(data):
-    if isinstance(data, str):
-        data = data.encode('utf-8')
-    return base64.urlsafe_b64encode(data).decode('ascii').rstrip('=')
+def sign_session(user_id):
+    return _sign_session(user_id, SECRET)
 
 
-def _base64url_decode(text):
-    return base64.urlsafe_b64decode(text + '=' * (-len(text) % 4))
-
-
-def sign_session(user_id, secret=SECRET):
-    now = int(time.time() * 1000)
-    payload = _base64url(json.dumps({'uid': user_id, 'iat': now, 'exp': now + SESSION_TTL * 1000}))
-    sig = _base64url(hmac.new(secret.encode('utf-8'), payload.encode('utf-8'), hashlib.sha256).digest())
-    return f'{payload}.{sig}'
-
-
-def verify_session_token(token, secret=SECRET):
-    """校验令牌签名与有效期，返回 {uid, iat, exp} 或 None"""
-    if not token or not isinstance(token, str) or '.' not in token:
-        return None
-    payload, sig = token.rsplit('.', 1)
-    expect = _base64url(hmac.new(secret.encode('utf-8'), payload.encode('utf-8'), hashlib.sha256).digest())
-    if not hmac.compare_digest(sig, expect):
-        return None
-    try:
-        data = json.loads(_base64url_decode(payload))
-        if not data.get('uid') or not data.get('exp') or data['exp'] < int(time.time() * 1000):
-            return None
-        return data
-    except Exception:
-        return None
+def verify_session_token(token):
+    return _verify_token(token, SECRET)
 
 
 # ---------- 会话吊销 ----------
-def revoke_session(token, secret=SECRET):
+def revoke_session(token):
     """登出：吊销单个令牌（令牌本身带有效期，过期条目自动清理）"""
-    session = verify_session_token(token, secret)
+    session = verify_session_token(token)
     if not session:
         return
-    sig = token.rsplit('.', 1)[1]
     conn = _connect()
     try:
-        conn.execute('INSERT OR IGNORE INTO revoked_sessions (sig, exp) VALUES (?,?)', (sig, session['exp']))
+        conn.execute('INSERT OR IGNORE INTO revoked_sessions (sig, exp) VALUES (?,?)', (token_sig(token), session['exp']))
         conn.execute('DELETE FROM revoked_sessions WHERE exp < ?', (int(time.time() * 1000),))
         conn.commit()
     finally:
@@ -160,7 +112,9 @@ def revoke_session(token, secret=SECRET):
 def is_session_revoked(token):
     if not token:
         return False
-    sig = token.rsplit('.', 1)[1]
+    sig = token_sig(token)
+    if not sig:
+        return False
     conn = _connect()
     try:
         return bool(conn.execute('SELECT 1 FROM revoked_sessions WHERE sig = ?', (sig,)).fetchone())
@@ -169,7 +123,7 @@ def is_session_revoked(token):
 
 
 def revoke_all_sessions(user_id):
-    """修改密码等场景：使某用户的所有既有会话立即失效（ia严格小于 sessions_since 的令牌作废）"""
+    """修改密码等场景：使某用户的所有既有会话立即失效（iat 严格小于 sessions_since 的令牌作废）"""
     conn = _connect()
     try:
         conn.execute('UPDATE users SET sessions_since = ? WHERE id = ?', (int(time.time() * 1000), user_id))

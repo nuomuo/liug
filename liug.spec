@@ -1,8 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-# 流光 LIUG 桌面版打包配置（整个应用：托盘 + 主界面 + 桌面小组件）：
+# 流光 LIUG 桌面版打包配置（整个应用：托盘 + 主界面 + 桌面小组件）
 #   python -m PyInstaller --noconfirm liug.spec
 # 产物：dist/liug.exe（单文件、无控制台窗口）
+#
+# 结构口径（与源码目录一致）：
+#   - 入口 desktop/main.py（桌面壳：托盘/窗口/内嵌服务）
+#   - 业务核心 core/（与远程后端共享）；本地免登录认证 desktop/local_auth.py（单机模式）
+#   - 用户管理逻辑（server/users.py 账户体系）不进入 exe：desktop 侧不 import 它，
+#     并在 excludes 里显式排除作为兜底
 from PyInstaller.utils.hooks import collect_all
+import os
 import sys
 from pathlib import Path
 
@@ -39,15 +46,16 @@ for pkg in ('webview', 'pythonnet', 'clr_loader', 'pystray'):
     hiddenimports += h
 
 a = Analysis(
-    ['server/desktop_app.py'],
-    pathex=['server'],
+    ['desktop/main.py'],
+    pathex=[SPECPATH, os.path.join(SPECPATH, 'desktop')],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # 用户管理（server/users.py 账户体系）不打包进 exe：desktop 不引用它，此处显式排除兜底
+    excludes=['users', 'routes_api', 'routes_system'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -67,5 +75,5 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    icon='server/assets/liug.ico',
+    icon='desktop/assets/liug.ico',
 )

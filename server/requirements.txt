@@ -1,6 +1,5 @@
+# 远程后端依赖（纯服务端部署，不含桌面壳依赖——桌面依赖见 desktop/requirements.txt）
 fastapi>=0.115
 uvicorn>=0.30
 httpx>=0.27
 regex>=2024.4.16
-# 桌面四象限小组件（desktop_widget.py）窗口壳；纯服务端部署可不安
-pywebview>=5.0
