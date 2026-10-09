@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { store, applyTheme, showToast, logout, handleSyncStatus } from '../store.js';
 import { api } from '../api.js';
 import Icon from './Icon.vue';
+import RangeSlider from './RangeSlider.vue';
 
 const presets = [
   { name: '黑海（默认）', color: '#484553' },
@@ -122,6 +123,48 @@ async function syncNow() {
     syncSaving.value = false;
   }
 }
+
+// ---------- 桌面端：四象限组件大小（百分比 0-100，50% = 默认尺寸；远程环境无此端点则隐藏） ----------
+const widgetAvailable = ref(false);
+const widgetPct = ref(50);
+const widgetOpen = ref(false);
+let widgetBusy = false; // 刷新循环是否在跑（合并中间值 + 串行发送，避免请求堆积）
+
+async function loadWidget() {
+  try {
+    const s = await api.getWidget();
+    widgetAvailable.value = true;
+    widgetPct.value = Number(s?.sizePct) || 0;
+    widgetOpen.value = !!s?.open;
+  } catch {
+    widgetAvailable.value = false; // 远程浏览器环境（无桌面端点）
+  }
+}
+
+// 拖动实时预览：单循环反复提交「最新值」，两次提交间隔 60ms（合并中间值），
+// 松手后循环再发一次终值即退出，保证最终尺寸与滑块一致
+async function pumpWidgetPct() {
+  widgetBusy = true;
+  try {
+    let sent = null;
+    while (sent !== widgetPct.value) {
+      sent = widgetPct.value;
+      try {
+        await api.setWidgetSize(sent);
+      } catch {}
+      await new Promise((r) => setTimeout(r, 60));
+    }
+  } finally {
+    widgetBusy = false;
+  }
+}
+
+function onWidgetPctInput(pct) {
+  widgetPct.value = pct;
+  if (!widgetBusy) pumpWidgetPct();
+}
+
+onMounted(loadWidget);
 </script>
 
 <template>
@@ -206,6 +249,22 @@ async function syncNow() {
             <span class="custom-value">{{ currentColor }}</span>
             <button class="reset-btn" @click="reset">恢复默认</button>
           </div>
+        </div>
+
+        <div class="sp-section" v-if="widgetAvailable">
+          <div class="sp-section-title">四象限组件</div>
+          <div class="sp-section-desc">拖动调整桌面小组件大小（等比缩放），实时生效并自动保存</div>
+          <div class="widget-size-row">
+            <RangeSlider
+              :model-value="widgetPct"
+              :min="0"
+              :max="100"
+              :step="1"
+              @update:model-value="onWidgetPctInput"
+            />
+            <span class="widget-size-value">{{ widgetPct }}%</span>
+          </div>
+          <div class="widget-size-hint" v-if="!widgetOpen">小组件当前未打开，设置将在下次打开时生效</div>
         </div>
       </div>
     </div>
@@ -493,5 +552,27 @@ async function syncNow() {
 .account-btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.widget-size-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+.widget-size-row :deep(.range-slider) {
+  flex: 1;
+}
+.widget-size-value {
+  width: 44px;
+  flex: none;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--grey-80);
+}
+.widget-size-hint {
+  font-size: 12px;
+  color: var(--grey-40);
+  margin-top: 8px;
 }
 </style>

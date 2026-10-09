@@ -137,6 +137,8 @@ export async function logout() {
 
 /** 会话中途失效（API 返回 401）：回到登录页 */
 setUnauthorizedHandler(() => {
+  // 本就未登录（如登出后小组件的登录态探测、登录页首次 checkAuth）不再提示，避免重复弹 toast
+  if (!store.user) return;
   store.user = null;
   stopSyncPolling();
   clearUserData();

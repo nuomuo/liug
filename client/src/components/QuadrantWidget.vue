@@ -136,12 +136,16 @@ async function refresh() {
       // 未登录：定期探测登录状态（用户可能在主界面窗口完成登录，cookie 两窗口共享）
       await checkAuth();
     }
+  } catch {
+    // 静默失败：主界面登出后本窗口仍持有旧 user，首次拉取会 401（已由 onUnauthorized 切回登录态）
   } finally {
     refreshing.value = false;
   }
 }
 function onFocus() {
   refresh();
+  // 切出/切回前台后 WebView2 透明合成可能掉线（面板后露出窗口兜底底色），请后端重建一次
+  window.pywebview?.api?.reassert_transparency?.();
 }
 let timer = null;
 

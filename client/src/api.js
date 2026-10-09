@@ -41,6 +41,10 @@ export const api = {
   getDesktopConfig: () => req('GET', '/api/desktop/config'),
   saveDesktopConfig: (remoteUrl) => req('PUT', '/api/desktop/config', { remoteUrl }),
 
+  // 桌面端「四象限组件」大小设置（远程服务端无此端点，404 即远程环境，调用方自行容错）
+  getWidget: () => req('GET', '/api/desktop/widget'),
+  setWidgetSize: (sizePct) => req('PUT', '/api/desktop/widget', { sizePct }),
+
   // 云端同步（桌面端云端账号；远程/单机环境调用会 404/400，调用方自行容错）
   syncStatus: () => req('GET', '/api/sync/status'),
   syncRun: () => req('POST', '/api/sync/run'),

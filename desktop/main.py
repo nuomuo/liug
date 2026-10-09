@@ -68,9 +68,138 @@ MUTEX_NAME = 'Global\\LiugDesktopAppSingleInstance'
 WIDGET_MIN_SIZE = (420, 320)
 WIDGET_MAX_SIZE = (1100, 900)
 WIDGET_DEFAULT_SIZE = (560, 440)
+# 「四象限组件大小」设置项（设置面板百分比滑块）↔ 窗口尺寸：50% = WIDGET_DEFAULT_SIZE（默认尺寸），
+# 全程等比（保持宽高比）。0%/100% 由上下限在等比约束下反推（取宽高都能落回上下限内的最大范围），
+# 故 100% ≈ 1100×864、0% ≈ 420×330（均未越界），保证 50% 恰好等于 WIDGET_DEFAULT_SIZE。
+WIDGET_SIZE_PCT_DEFAULT = 50
+WIDGET_SCALE_MIN = max(WIDGET_MIN_SIZE[0] / WIDGET_DEFAULT_SIZE[0], WIDGET_MIN_SIZE[1] / WIDGET_DEFAULT_SIZE[1])
+WIDGET_SCALE_MAX = min(WIDGET_MAX_SIZE[0] / WIDGET_DEFAULT_SIZE[0], WIDGET_MAX_SIZE[1] / WIDGET_DEFAULT_SIZE[1])
 WIDGET_TITLE = '四象限'  # Win32 窗口标题：ctypes FindWindowW 按标题定位用于置顶切换
+# 透明合成掉线时露出的窗口兜底底色（用户看到的「白色背板」即 pywebview 默认的纯白 #FFFFFF）：
+# 改用暗色，掉线瞬间不再闪出刺眼白板，观感更接近面板阴影
+WIDGET_FALLBACK_BG = '#181a20'
 
 _state = {'main': None, 'widget': None, 'widget_api': None, 'icon': None, 'server': None, 'base_url': '', 'quitting': False}
+
+# 透明合成重建（hide→show）的节流：两次重建的最小间隔，防止 hide→show 派发的 shown/focus
+# 再次触发重建形成自激循环；配合互斥锁保证同一时刻只有一个重建在跑
+_REASSERT_LOCK = threading.Lock()
+_REASSERT_COOLDOWN = 0.8  # 秒
+_reassert_last = {'t': 0.0}
+
+
+def _reassert_widget_transparency(win, delay=0.0, force=False):
+    """强制重建透明窗口的合成层（hide→show）。
+
+    WebView2 透明窗口的合成层会在启动瞬间、最小化→还原、切出切回前台、DWM 重排等时机掉线，
+    此时窗口露出兜底底色（WIDGET_FALLBACK_BG），半透明面板看起来变成不透明色块。hide→show
+    一次可让 DWM 重建合成层（与 pywebview 初始化透明窗口时的 Show/Hide hack 同理）。
+    同一窗口在冷却期内只执行一次，避免自激；force=True 时跳过冷却（用于「窗口放大后」的定向
+    重建，此时由 _schedule_widget_reassert 去抖合并，不会高频触发），但仍刷新计时以保留自激保护。
+    """
+    if win is None:
+        return
+    now = time.monotonic()
+    if not force and now - _reassert_last['t'] < _REASSERT_COOLDOWN:
+        return
+    _reassert_last['t'] = now
+
+    def _run():
+        if delay > 0:
+            time.sleep(delay)  # 等动画结束、窗口状态稳定
+        with _REASSERT_LOCK:
+            prev = _get_foreground_hwnd()
+            try:
+                win.hide()
+                time.sleep(0.25)
+                win.show()
+            except Exception:
+                pass
+            # win.show() 内部会 Activate() 抢焦点：若用户正在主界面拖设置滑块，这会让滑块
+            # 丢失指针捕获而中断拖动。故重建后把前台窗口还给重建前的那个。
+            _restore_foreground(prev)
+
+    threading.Thread(target=_run, daemon=True, name='widget-reassert').start()
+
+
+def _get_foreground_hwnd():
+    """取当前前台窗口句柄（Windows）；非 Windows 或失败返回 0"""
+    if sys.platform != 'win32':
+        return 0
+    try:
+        import ctypes
+        return int(ctypes.windll.user32.GetForegroundWindow())
+    except Exception:
+        return 0
+
+
+def _restore_foreground(hwnd) -> None:
+    """把前台窗口切回 hwnd（hwnd 为 0 或已销毁则不动）"""
+    if sys.platform != 'win32' or not hwnd:
+        return
+    try:
+        import ctypes
+        if not ctypes.windll.user32.IsWindow(hwnd):
+            return
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
+# 尺寸稳定后的定向透明重建去抖器：拖动/滑块连续改尺寸时只保留最后一次触发
+_WIDGET_REASSERT_DEBOUNCE = {'timer': None, 'lock': threading.Lock()}
+
+
+def _schedule_widget_reassert(win, delay=0.35):
+    """尺寸停止变化 delay 秒后重建透明合成层（连续调用只保留最后一次）。
+
+    窗口放大（resize 增大）时新增的客户区未被透明合成层覆盖，会露出兜底底色——缩小因无新增区域
+    无此问题。待尺寸稳定后 hide→show 一次，让 DWM 按新尺寸重建合成层即恢复透明。
+    """
+    if win is None:
+        return
+    with _WIDGET_REASSERT_DEBOUNCE['lock']:
+        old = _WIDGET_REASSERT_DEBOUNCE.get('timer')
+        if old is not None:
+            old.cancel()
+        timer = threading.Timer(delay, lambda: _reassert_widget_transparency(win, force=True))
+        timer.daemon = True
+        _WIDGET_REASSERT_DEBOUNCE['timer'] = timer
+        timer.start()
+
+
+def _set_widget_fallback_bg(win) -> None:
+    """把透明窗口的原生 Form 底色改成暗色（WIDGET_FALLBACK_BG）。
+
+    transparent=True 时 pywebview 会忽略 create_window 的 background_color：
+    - webview/platforms/winforms.py 只在非透明分支才 `self.BackColor = ...`，
+      透明分支仅设 `browser.DefaultBackgroundColor = Color.Transparent`；
+    - webview/platforms/edgechromium.py 也是先按 background_color 设 DefaultBackgroundColor，
+      紧接着 `if window.transparent:` 覆盖为 Color.Transparent。
+    故 Form 底色一直是 WinForms 默认浅色 SystemColors.Control（即用户看到的「白色背板」）。
+    这里直接改原生 Form 的 BackColor，合成层未就绪时露出的是暗色兜底而非白板。
+    """
+    if sys.platform != 'win32' or win is None:
+        return
+    try:
+        form = getattr(win, 'native', None)
+        if form is None:
+            return
+        from System import Func, Type
+        from System.Drawing import Color
+
+        def _apply():
+            try:
+                form.BackColor = Color.FromArgb(0x18, 0x1A, 0x20)
+            except Exception:
+                pass
+
+        if form.InvokeRequired:  # 非 GUI 线程时切回 GUI 线程执行
+            form.Invoke(Func[Type](_apply))
+        else:
+            _apply()
+    except Exception:
+        pass
 
 
 def _data_dir() -> Path:
@@ -118,6 +247,41 @@ def _save_widget_geometry() -> None:
         _log(f'小组件状态已保存 {kv}')
     except Exception:
         pass
+
+
+def _widget_pct_to_size(pct) -> tuple:
+    """百分比（0-100）→ 窗口尺寸（像素）。
+
+    以 WIDGET_DEFAULT_SIZE 为基准做等比缩放：50% = 默认尺寸（当前尺寸），
+    0-50% 与 50-100% 两段线性映射到等比系数区间 [WIDGET_SCALE_MIN, 1] / [1, WIDGET_SCALE_MAX]，
+    保证 0/50/100 三点精确且全程宽高比恒定。
+    """
+    pct = max(0.0, min(100.0, float(pct)))
+    if pct <= WIDGET_SIZE_PCT_DEFAULT:
+        s = WIDGET_SCALE_MIN + (pct / WIDGET_SIZE_PCT_DEFAULT) * (1.0 - WIDGET_SCALE_MIN)
+    else:
+        s = 1.0 + ((pct - WIDGET_SIZE_PCT_DEFAULT) / (100.0 - WIDGET_SIZE_PCT_DEFAULT)) * (WIDGET_SCALE_MAX - 1.0)
+    w = int(round(WIDGET_DEFAULT_SIZE[0] * s))
+    h = int(round(WIDGET_DEFAULT_SIZE[1] * s))
+    w = max(WIDGET_MIN_SIZE[0], min(WIDGET_MAX_SIZE[0], w))
+    h = max(WIDGET_MIN_SIZE[1], min(WIDGET_MAX_SIZE[1], h))
+    return w, h
+
+
+def _widget_size_to_pct(w, h) -> int:
+    """窗口尺寸（像素）→ 百分比（手动拖拽边缘缩放后反算，令设置面板滑块与实际一致）。
+
+    拖拽可得到非等比尺寸，这里对宽、高各自反推后取平均，返回最接近的整数百分比。
+    """
+    try:
+        s = (float(w) / WIDGET_DEFAULT_SIZE[0] + float(h) / WIDGET_DEFAULT_SIZE[1]) / 2.0
+    except (TypeError, ValueError, ZeroDivisionError):
+        return WIDGET_SIZE_PCT_DEFAULT
+    if s <= 1.0:
+        pct = WIDGET_SIZE_PCT_DEFAULT * (s - WIDGET_SCALE_MIN) / (1.0 - WIDGET_SCALE_MIN)
+    else:
+        pct = WIDGET_SIZE_PCT_DEFAULT + (100.0 - WIDGET_SIZE_PCT_DEFAULT) * (s - 1.0) / (WIDGET_SCALE_MAX - 1.0)
+    return int(round(max(0.0, min(100.0, pct))))
 
 
 def _set_widget_topmost(pin: bool) -> bool:
@@ -243,13 +407,53 @@ def _wait_ready(base_url: str, timeout: float = 15.0) -> None:
     raise RuntimeError('内嵌服务启动超时')
 
 
+def _build_widget_router():
+    """桌面端「四象限组件大小」设置路由（仅桌面端注册；远程服务端无此端点 → 前端据此隐藏该设置项）"""
+    from fastapi import APIRouter, Body
+
+    from core.errors import ApiError
+
+    router = APIRouter(prefix='/api/desktop')
+
+    @router.get('/widget')
+    def get_widget():
+        st = _load_widget_state()
+        w = int(st.get('w') or WIDGET_DEFAULT_SIZE[0])
+        h = int(st.get('h') or WIDGET_DEFAULT_SIZE[1])
+        pct = st.get('size_pct')
+        if not isinstance(pct, (int, float)):
+            pct = _widget_size_to_pct(w, h)  # 老状态文件无 size_pct：由尺寸反推
+        return {
+            'sizePct': int(pct), 'size': [w, h], 'open': _widget_alive(),
+            'minPct': 0, 'maxPct': 100,
+            'minSize': list(WIDGET_MIN_SIZE), 'maxSize': list(WIDGET_MAX_SIZE),
+        }
+
+    @router.put('/widget')
+    def put_widget(payload: dict = Body(default={})):
+        try:
+            pct = int(round(float(payload.get('sizePct'))))
+        except (TypeError, ValueError):
+            raise ApiError(400, 'sizePct 必须是 0-100 的数字')
+        pct = max(0, min(100, pct))
+        w, h = _widget_pct_to_size(pct)
+        api = _state.get('widget_api')
+        if api is not None and _widget_alive():
+            api.apply_size(w, h, pct)  # 组件已打开：实时缩放
+        else:
+            _write_widget_state(w=w, h=h, size_pct=pct)  # 未打开：仅持久化，下次打开生效
+        return {'sizePct': pct, 'size': [w, h]}
+
+    return router
+
+
 def _build_app():
     """组装桌面端 FastAPI 应用：core 业务核心 + 本地认证（单机/云端）+ 云端同步引擎"""
     from core.app_factory import create_app
     from local_auth import get_user_id, router as auth_router
     from sync import init_engine, router as sync_router
     # extra_routers 在 SPA catch-all 之前注册（后 include 的 GET 会被 fallback 吞掉）
-    app = create_app(get_user_id, auth_router, extra_routers=[sync_router])
+    app = create_app(get_user_id, auth_router, extra_routers=[sync_router, _build_widget_router()])
     init_engine(_data_dir()).start()  # 同步引擎随主服务启动（云端账号登录后生效）
     return app
 
@@ -302,6 +506,10 @@ class _WidgetApi:
         if self._window:
             self._window.minimize()
 
+    def reassert_transparency(self):
+        """小组件窗口重新聚焦时调用：切出/切回前台后透明合成可能掉线，重建一次合成层"""
+        _reassert_widget_transparency(self._window)
+
     # ---- 标题栏拖动窗口（HTCAPTION 原生拖动在 WebView2 下不生效，改用与缩放同款的指针方案）----
     # 前端三步调用：begin_move() → update_move()（拖动中高频） → end_move()
 
@@ -342,18 +550,39 @@ class _WidgetApi:
             return pin
         return None  # 窗口定位失败（如非 Windows）
 
+    def _reassert_after_grow(self, before):
+        """窗口尺寸变大后，安排一次透明合成层重建（去抖）。
+
+        WebView2 透明窗口在客户区增大时，新增区域未被透明合成层覆盖 → 露出兜底底色；缩小无新增
+        区域故不受影响。仅在至少一个方向变大时触发，避免纯缩小时的无效 hide→show 闪烁。
+        before 为本次尺寸变更前的 [w, h]。
+        """
+        if not self._window:
+            return
+        if self._size[0] > before[0] or self._size[1] > before[1]:
+            _schedule_widget_reassert(self._window)
+
+    def apply_size(self, w, h, pct=None):
+        """按绝对尺寸（像素）调整窗口并持久化；pct 给定则精确回写百分比（设置面板滑块用）"""
+        if not self._window:
+            return None
+        w = max(WIDGET_MIN_SIZE[0], min(WIDGET_MAX_SIZE[0], int(w)))
+        h = max(WIDGET_MIN_SIZE[1], min(WIDGET_MAX_SIZE[1], int(h)))
+        before = self._size
+        self._size = [w, h]
+        self._window.resize(w, h)
+        # 记住尺寸与百分比，下次打开保持，且设置面板滑块与之一致
+        _write_widget_state(w=w, h=h, size_pct=int(pct) if pct is not None else _widget_size_to_pct(w, h))
+        self._reassert_after_grow(before)
+        return [w, h]
+
     def resize(self, dw=0, dh=0, w=None, h=None):
         """调整小组件窗口尺寸（像素）：传 w/h 直接设置，传 dw/dh 按增量调整，夹在上下限内"""
         if not self._window:
             return None
         if w is None or h is None:
             w, h = self._size[0] + int(dw), self._size[1] + int(dh)
-        w = max(WIDGET_MIN_SIZE[0], min(WIDGET_MAX_SIZE[0], int(w)))
-        h = max(WIDGET_MIN_SIZE[1], min(WIDGET_MAX_SIZE[1], int(h)))
-        self._size = [w, h]
-        self._window.resize(w, h)
-        _write_widget_state(w=w, h=h)  # 记住尺寸，下次打开保持
-        return [w, h]
+        return self.apply_size(w, h)
 
     # ---- 拖拽边缘/角落缩放（frameless 窗口原生不支持，用 Win32 补齐，见 widget_window.py）----
     # 前端三步调用：begin_resize(edge) → update_resize()（拖动中高频） → end_resize()
@@ -376,8 +605,11 @@ class _WidgetApi:
         self._resize = None
         if geo:
             x, y, w, h = geo
+            before = self._size
             self._size = [w, h]
-            _write_widget_state(x=x, y=y, w=w, h=h)
+            # 反算百分比：手动拖拽后设置面板滑块与实际尺寸保持一致
+            _write_widget_state(x=x, y=y, w=w, h=h, size_pct=_widget_size_to_pct(w, h))
+            self._reassert_after_grow(before)
 
 
 def _widget_alive() -> bool:
@@ -417,7 +649,7 @@ def _create_main_window(base_url):
     w.events.closing += _on_closing
 
 
-def _create_widget_window(base_url, rebuild=False):
+def _create_widget_window(base_url):
     import webview
     if _widget_alive():
         try:
@@ -443,6 +675,7 @@ def _create_widget_window(base_url, rebuild=False):
         min_size=WIDGET_MIN_SIZE, **pos,
         frameless=True,   # 无边框：UI 完全由前端面板绘制
         transparent=True,  # 透明背景：只显示小组件面板本体
+        background_color=WIDGET_FALLBACK_BG,  # 兜底底色：透明合成掉线时露出的是暗色而非默认纯白
         on_top=False,     # 默认不置顶，不遮挡其他应用；置顶由标题栏图钉按钮切换（持久化）
         easy_drag=False,  # 必须显式关闭（默认 True！）：其监听任意 mousedown，会与页面内
         # 拖任务/缩放手柄冲突（HTML5 拖拽吞掉 mouseup 后窗口跟着鼠标跑）；拖动改由标题栏 begin/update/end_move API 实现
@@ -456,31 +689,22 @@ def _create_widget_window(base_url, rebuild=False):
         # 上次是置顶状态则恢复（Win32 层切换，见 _set_widget_topmost）
         if st.get('pin'):
             _set_widget_topmost(True)
-        if rebuild:
-            # pywebview 的透明窗口 hack（创建时 Show→Hide）只在 webview.start() 时生效，
-            # 托盘动态重建的窗口透明合成失效，shown 后 hide→show 强制重建一次
-            time.sleep(0.2)
-            try:
-                win.hide()
-                time.sleep(0.3)
-                win.show()
-            except Exception:
-                pass
+        # 兜底底色在这里改：transparent 窗口下 background_color 被 pywebview 忽略
+        _set_widget_fallback_bg(win)
 
     def _on_restored():
-        # WebView2 透明窗口最小化再还原后透明合成会失效（面板背后露出窗体底色，
-        # 半透明面板/按钮视觉全变），hide→show 一次强制重建合成层即可恢复
-        # （与 pywebview 初始化透明窗口时的 Show/Hide hack 同理）
-        time.sleep(0.2)  # 等还原动画结束、窗口状态稳定
-        try:
-            win.hide()
-            time.sleep(0.3)
-            win.show()
-        except Exception:
-            pass
+        # 最小化→还原后透明合成常掉线（面板背后露出兜底底色），重建一次合成层恢复
+        _reassert_widget_transparency(win, delay=0.2)
+
+    def _on_loaded():
+        # 页面首帧绘制完成后才重建合成层。shown 事件早于导航（pywebview 的 Show/Hide hack 时
+        # 就触发），冷启动下 0.2s 的重建落在页面绘制之前 → 合成层仍掉线、首开残留白板；
+        # 托盘重开时进程/WebView2/缓存已热，页面在 0.2s 内绘制完，重建才生效，故「重开就好」。
+        _reassert_widget_transparency(win, delay=0.15)
 
     win.events.shown += _on_shown
     win.events.restored += _on_restored
+    win.events.loaded += _on_loaded
 
 
 def _open_main():
@@ -504,7 +728,7 @@ def _toggle_widget():
         _state['widget'] = None
     else:
         _log('托盘：打开桌面小组件')
-        _create_widget_window(_state['base_url'], rebuild=True)
+        _create_widget_window(_state['base_url'])
 
 
 def _quit():
