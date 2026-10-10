@@ -10,7 +10,7 @@
   - **云端账号（离线可用 + 双向同步）**：登录页「登录账号（云端同步）」配置服务器地址（`<data>/config.json` 的 remoteUrl，由 `GET/PUT /api/desktop/config` 读写）与账号密码，`POST /api/auth/remote` 由本地服务代理登录远程服务器（WebView 不整页跳转）；远程令牌存 `<data>/remote-session.json`，本地签发 uid=远程用户 ID 的 30 天会话；登录成功即以不播种方式建空镜像库 `<LIUG_USERS_DIR>/<远程ID>.db`（与单机 `local.db` 完全隔离），断网照常使用，`me` 返回 `mode='cloud'`。
   - **同步引擎 `desktop/sync.py`**（随主服务启动，小组件内嵌模式不启动防双引擎）：本地写操作后前端 fire-and-forget `POST /api/sync/kick`（防抖 3 秒）+ 定时 300 秒 + 设置面板手动「立即同步」`POST /api/sync/run`；协议为 `POST /api/sync` 全量快照 LWW 合并（详见 `core/sync.py`）；状态持久化 `<data>/sync-state.json`，前端 30s 轮询 `GET /api/sync/status`，`lastChangedAt` 前进时自动刷新数据；远程令牌过期报 `expired` 引导重登、断网报 `offline` 恢复后自动补同步，均不影响离线使用。
   `desktop_widget.py` 为独立小组件启动器（按 `service-port.json` 发现主服务、兜底 4300，否则内嵌 uvicorn 独立运行，可用 `LIUG_WIDGET_SERVER_URL` 指定服务地址、`LIUG_WIDGET_FORCE_EMBEDDED=1` 强制内嵌）。依赖见 `desktop/requirements.txt`。
-- 打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；入口 `desktop/main.py`，`excludes` 显式排除用户管理模块；冻结模式数据目录为 exe 同级 `data/`（`LIUG_DATA_DIR`）、静态资源用 `LIUG_DIST_DIR` 指向 _MEIPASS 内副本，运行日志 `data/desktop.log`、错误日志 `data/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
+- 打包：`python -m PyInstaller --noconfirm liug.spec`（产物 `dist/liug.exe`，单文件无控制台；入口 `desktop/main.py`，`excludes` 显式排除用户管理模块；冻结模式数据目录为用户家目录 `~/.liug`（`desktop/app_paths.py`：首次启动自动从 exe 同级旧 `data/` 整体迁移，目录隐藏+系统属性并用 ACL 拒绝删除防误删）、静态资源用 `LIUG_DIST_DIR` 指向 _MEIPASS 内副本，运行日志 `~/.liug/desktop.log`、错误日志 `~/.liug/desktop.err.log`）。注意 `console=False` 下 `sys.stdout/stderr` 为 None 会导致原生层静默崩溃，启动器已内置重定向，勿移除。
 - 旧 Node 后端与旧 Flask 管理程序均已退役、不再维护（备份目录已从仓库移除）。
 
 ## 数据库隔离（最高优先级）

@@ -31,13 +31,16 @@ from pathlib import Path
 import uvicorn
 
 # PyInstaller 冻结模式（liug.exe）：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖）
+# - 数据目录默认放在用户家目录 .liug/（首次启动自动从 exe 同级 data/ 迁移，
+#   目录隐藏并拒绝删除；可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖，详见 desktop/app_paths.py）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('LIUG_DATA_DIR', str(_EXE_DIR / 'data'))
-    os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
+    from app_paths import init_frozen_paths
+    _FROZEN_DATA_DIR = init_frozen_paths(_EXE_DIR)
+    os.environ.setdefault('LIUG_DATA_DIR', str(_FROZEN_DATA_DIR))
+    os.environ.setdefault('LIUG_USERS_DIR', str(_FROZEN_DATA_DIR / 'users'))
     os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
     # 无控制台模式（console=False）下 sys.stdout/stderr 为 None，
     # pythonnet/clr_loader 初始化或日志写入会因 None 崩溃导致进程静默退出——必须替换掉
@@ -45,8 +48,8 @@ if getattr(sys, 'frozen', False):
         sys.stdout = open(os.devnull, 'w', encoding='utf-8')
     if sys.stderr is None:
         try:
-            (_EXE_DIR / 'data').mkdir(parents=True, exist_ok=True)
-            sys.stderr = open(_EXE_DIR / 'data' / 'desktop.err.log', 'a', encoding='utf-8', buffering=1)
+            _FROZEN_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            sys.stderr = open(_FROZEN_DATA_DIR / 'desktop.err.log', 'a', encoding='utf-8', buffering=1)
         except Exception:
             sys.stderr = open(os.devnull, 'w', encoding='utf-8')
 else:
@@ -206,7 +209,9 @@ def _data_dir() -> Path:
     env = os.environ.get('LIUG_DATA_DIR')
     if env:
         return Path(env)
-    return (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+    if _EXE_DIR:  # 冻结模式默认：用户家目录 .liug（与 app_paths.init_frozen_paths 同口径）
+        return Path.home() / '.liug'
+    return BASE_DIR.parent / 'data'
 
 
 def _widget_state_file() -> Path:
@@ -792,7 +797,7 @@ def main():
     _create_widget_window(base_url)
 
     # private_mode=False：保留 cookies/localStorage（登录状态、主题色等跨重启记忆），
-    # storage_path 指到 exe 同级 data/webview，便携不污染系统浏览器配置
+    # storage_path 指到数据目录（.liug）下 webview/，便携不污染系统浏览器配置
     webview_storage = _data_dir() / 'webview'
     webview_storage.mkdir(parents=True, exist_ok=True)
     webview.start(private_mode=False, storage_path=str(webview_storage))  # 阻塞至所有窗口销毁（实际仅托盘「退出」会触发）

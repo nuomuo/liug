@@ -19,13 +19,16 @@ from pathlib import Path
 import uvicorn
 
 # PyInstaller 冻结模式：
-# - 数据目录默认放在 exe 同级 data/ 下（可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖）
+# - 数据目录默认放在用户家目录 .liug/（首次启动自动从 exe 同级 data/ 迁移，
+#   目录隐藏并拒绝删除；可用 LIUG_DATA_DIR / LIUG_USERS_DIR 覆盖，详见 desktop/app_paths.py）
 # - 静态资源指向 _MEIPASS 解包目录内打包的 client/dist 副本
 if getattr(sys, 'frozen', False):
     _EXE_DIR = Path(sys.executable).resolve().parent
     _MEIPASS = Path(sys._MEIPASS)
-    os.environ.setdefault('LIUG_DATA_DIR', str(_EXE_DIR / 'data'))
-    os.environ.setdefault('LIUG_USERS_DIR', str(_EXE_DIR / 'data' / 'users'))
+    from app_paths import init_frozen_paths
+    _FROZEN_DATA_DIR = init_frozen_paths(_EXE_DIR)
+    os.environ.setdefault('LIUG_DATA_DIR', str(_FROZEN_DATA_DIR))
+    os.environ.setdefault('LIUG_USERS_DIR', str(_FROZEN_DATA_DIR / 'users'))
     os.environ.setdefault('LIUG_DIST_DIR', str(_MEIPASS / 'client' / 'dist'))
 else:
     _EXE_DIR = None
@@ -115,7 +118,9 @@ def _data_dir() -> Path:
     env = os.environ.get('LIUG_DATA_DIR')
     if env:
         return Path(env)
-    return (_EXE_DIR if _EXE_DIR else BASE_DIR.parent) / 'data'
+    if _EXE_DIR:  # 冻结模式默认：用户家目录 .liug（与 app_paths.init_frozen_paths 同口径）
+        return Path.home() / '.liug'
+    return BASE_DIR.parent / 'data'
 
 
 def _dist_version() -> str:

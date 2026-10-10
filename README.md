@@ -39,14 +39,14 @@
 
 - 单进程 = 系统托盘（pystray）+ 主界面窗口（pywebview/WebView2）+ 可选桌面小组件 + 内嵌 uvicorn 服务
 - 单实例互斥锁防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束
-- 内嵌服务使用粘性动态端口（上次端口 → 4300 → 随机，bind 即占有并记录到 `data/service-port.json`），不与其他程序冲突；数据与日志在 exe 同级 `data/`
+- 内嵌服务使用粘性动态端口（上次端口 → 4300 → 随机，bind 即占有并记录到数据目录 `service-port.json`），不与其他程序冲突；**数据与日志在用户家目录 `~/.liug`**（如 `C:\Users\<用户>\.liug`，首次启动自动从 exe 同级旧 `data/` 迁移，目录隐藏并拒绝删除防误删）
 - **离线可用 + 云端同步**：登录云端账号后数据保存在本地镜像库，断网照常使用，联网后自动与服务器双向同步（也可在设置面板手动「立即同步」）
 - 登录持久化（WebView2 非隐私模式），重启 exe 免登录
 
 ### 桌面四象限小组件
 
 - 无边框透明窗口常驻桌面（主应用 `/quadrant` 页面）：标题栏拖动、边缘/四角拖拽缩放（420×320 ~ 1100×900）、−/＋按钮与 Ctrl+滚轮缩放
-- 图钉置顶切换、玻璃白/主题色/暗色三档配色、位置/尺寸/置顶记忆（`data/widget.json`）
+- 图钉置顶切换、玻璃白/主题色/暗色三档配色、位置/尺寸/置顶记忆（数据目录 `widget.json`）
 - 与主界面窗口通过 storage 事件实时双向同步；未登录时显示提示卡可一键唤起主窗口登录
 
 ### 管理端（/admin/，仅管理员）
@@ -184,8 +184,8 @@ python -m PyInstaller --noconfirm liug.spec
 # 产物：dist/liug.exe（单文件、无控制台窗口，双击即用）
 ```
 
-- 已打包 `client/dist` 静态资源与全部运行时依赖；数据目录在 exe 同级 `data/`，与源码运行的 `data/` 互不干扰
-- 排查 exe 问题先看 `data/desktop.log` 与 `data/desktop.err.log`
+- 已打包 `client/dist` 静态资源与全部运行时依赖；数据目录在用户家目录 `~/.liug`（自动从旧版 exe 同级 `data/` 迁移），与源码运行的 `data/` 互不干扰
+- 排查 exe 问题先看 `~/.liug/desktop.log` 与 `~/.liug/desktop.err.log`
 - 注意：spec 会从 conda Python 的 `Library/bin` 收集 OpenSSL/libffi/sqlite3 等运行时 DLL，换 Python 环境构建时需确认该目录仍存在
 - 升级替换 exe 前，请先从托盘图标右键「退出」旧实例（单实例互斥锁会阻止双开）
 
@@ -220,7 +220,7 @@ $env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路�
 
 ## 七、目录结构
 
-![1791603662713](image/README/1791603662713.png)
+![1791603662713](doc/image/README/1791603662713.png)
 
 ```
 liug/
@@ -272,5 +272,5 @@ liug/
 ## 八、常见问题
 
 - **端口被占用**：`netstat -ano | findstr 4300` 找到 PID，确认是旧服务后 `taskkill /PID <pid> /F`
-- **桌面 exe 双击没反应**：先确认托盘没有旧实例（互斥锁单实例）；再看 exe 同级 `data/desktop.err.log`
+- **桌面 exe 双击没反应**：先确认托盘没有旧实例（互斥锁单实例）；再看 `~/.liug/desktop.err.log`
 - **前端改了代码桌面版没变化**：桌面窗口的 WebView2 有持久缓存，本项目已用「URL 版本号 + no-cache」根治；若仍旧，退出 exe 后删除 `%APPDATA%\pywebview` 缓存目录再启动
