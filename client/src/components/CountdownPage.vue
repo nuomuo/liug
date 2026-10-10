@@ -171,11 +171,13 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
             </span>
             <span class="cd-act cd-more" title="更多" @click.stop="toggleCardMenu(cd, $event)">
               <Icon name="more-titlebar" :size="18" />
-              <div v-if="menuFor === cd.id" ref="menuElRef" class="dropdown-menu cd-menu" @click.stop>
-                <li @click="openEdit(cd); menuFor = null">编辑</li>
-                <li @click="togglePin(cd); menuFor = null">{{ cd.pinned ? '取消置顶' : '置顶' }}</li>
-                <li class="danger" @click="remove(cd); menuFor = null">删除</li>
-              </div>
+              <Teleport to="body">
+                <div v-if="menuFor === cd.id" ref="menuElRef" class="dropdown-menu cd-menu" @click.stop>
+                  <li @click="openEdit(cd); menuFor = null">编辑</li>
+                  <li @click="togglePin(cd); menuFor = null">{{ cd.pinned ? '取消置顶' : '置顶' }}</li>
+                  <li class="danger" @click="remove(cd); menuFor = null">删除</li>
+                </div>
+              </Teleport>
             </span>
           </div>
         </div>
@@ -190,54 +192,56 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick));
     </div>
 
     <!-- 编辑弹窗 -->
-    <div v-if="editOpen" class="cd-modal-backdrop" @mousedown.self="editOpen = false">
-      <div class="cd-modal" @mousedown.stop>
-        <div class="cd-modal-title">{{ form.id ? '编辑' : '添加' }}{{ TYPE_META[form.type].label }}</div>
+    <Teleport to="body">
+      <div v-if="editOpen" class="cd-modal-backdrop" @mousedown.self="editOpen = false">
+        <div class="cd-modal" @mousedown.stop>
+          <div class="cd-modal-title">{{ form.id ? '编辑' : '添加' }}{{ TYPE_META[form.type].label }}</div>
 
-        <input v-model="form.title" class="cd-input title" placeholder="名称，如：恋爱纪念日" @keydown.enter="save" />
+          <input v-model="form.title" class="cd-input title" placeholder="名称，如：恋爱纪念日" @keydown.enter="save" />
 
-        <div class="cd-form-row">
-          <span class="cd-form-label">类型</span>
-          <div class="type-pills">
-            <span
-              v-for="(meta, key) in TYPE_META"
-              :key="key"
-              class="type-pill"
-              :class="{ active: form.type === key }"
-              @click="form.type = key"
-            >
-              {{ meta.label }}
-            </span>
+          <div class="cd-form-row">
+            <span class="cd-form-label">类型</span>
+            <div class="type-pills">
+              <span
+                v-for="(meta, key) in TYPE_META"
+                :key="key"
+                class="type-pill"
+                :class="{ active: form.type === key }"
+                @click="form.type = key"
+              >
+                {{ meta.label }}
+              </span>
+            </div>
+          </div>
+
+          <div class="cd-form-row">
+            <span class="cd-form-label">日期</span>
+            <input v-model="form.date" type="date" class="cd-input date" />
+            <label class="lunar-toggle">
+              <input v-model="form.isLunar" type="checkbox" />
+              农历
+            </label>
+          </div>
+          <div v-if="form.isLunar" class="lunar-hint">农历模式：所选日期的「月-日」按农历解释（春节 = 农历1月1日）</div>
+
+          <div class="cd-form-row checks">
+            <label>
+              <input v-model="form.repeatYearly" type="checkbox" />
+              每年重复
+            </label>
+            <label>
+              <input v-model="form.pinned" type="checkbox" />
+              置顶
+            </label>
+          </div>
+
+          <div class="cd-modal-actions">
+            <button class="cd-cancel" @click="editOpen = false">取消</button>
+            <button class="cd-save" @click="save">保存</button>
           </div>
         </div>
-
-        <div class="cd-form-row">
-          <span class="cd-form-label">日期</span>
-          <input v-model="form.date" type="date" class="cd-input date" />
-          <label class="lunar-toggle">
-            <input v-model="form.isLunar" type="checkbox" />
-            农历
-          </label>
-        </div>
-        <div v-if="form.isLunar" class="lunar-hint">农历模式：所选日期的「月-日」按农历解释（春节 = 农历1月1日）</div>
-
-        <div class="cd-form-row checks">
-          <label>
-            <input v-model="form.repeatYearly" type="checkbox" />
-            每年重复
-          </label>
-          <label>
-            <input v-model="form.pinned" type="checkbox" />
-            置顶
-          </label>
-        </div>
-
-        <div class="cd-modal-actions">
-          <button class="cd-cancel" @click="editOpen = false">取消</button>
-          <button class="cd-save" @click="save">保存</button>
-        </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
