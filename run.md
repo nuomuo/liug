@@ -18,7 +18,7 @@ npm install --prefix admin_client
 
 ## 二、一键管理脚本（推荐）
 
-日常编译、启动、停止全部通过根目录的 `manage.py` 完成（Windows PowerShell / CMD 均可）：
+日常编译、启动、停止全部通过根目录的 `manage.py` 完成，**Windows / Linux 通用**：
 
 ```powershell
 python manage.py build      # 编译前后端所有模块（Python 语法检查 + client + admin_client）
@@ -32,6 +32,7 @@ python manage.py status     # 查看端口与进程状态
 - `build` 对两个前端在缺 `node_modules` 时自动执行 `npm install`，无需单独装依赖
 - 运行日志写入 `data/server.log`（启动失败时脚本会自动打印日志末尾便于排查）
 - 所有命令均可加 `--test` 切换到测试环境（见「七、测试环境」）
+- **Linux 服务器部署**：在 venv 中运行 `python manage.py start`，服务以 `setsid` 后台常驻，SSH 断开后仍存活；停止时先 SIGTERM 优雅退出、超时再 SIGKILL；端口探测依赖 `ss`（或老系统 `netstat`），非 root 用户查看他人进程需 `sudo`
 
 ## 三、启动后端（手动方式，必须了解）
 
