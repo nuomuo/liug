@@ -51,8 +51,8 @@
 
 ### 管理端（/admin/，仅管理员）
 
-- 独立的用户管理控制台：新增用户、启用/禁用、重置密码、切换管理员/普通角色、删除用户
-- 双重防线：IP 白名单（`LIUG_ADMIN_ALLOWED_IPS`，默认仅本机）+ 独立登录页校验管理员角色，白名单外连页面都打不开（403），不影响主应用
+- 独立的用户管理控制台：新增用户、启用/禁用、重置密码、切换管理员/普通角色、删除用户；管理员也可在「当前账户」行修改自己的密码
+- 双重防线：IP 白名单（`LIUG_ADMIN_ALLOWED_IPS`，未配置即不限制，可经根目录 config.yaml 配置）+ 独立登录页校验管理员角色，白名单外连页面都打不开（403），不影响主应用
 - 复用主应用会话体系（同一 Cookie 与密钥）；重置密码后目标用户全部会话即时失效
 - 保护规则：不能对自己禁用/降级/删除，系统至少保留一个可用管理员；删除用户保留其数据文件
 - 独立前端工程 `admin_client/`，不打包进桌面 exe（详见「快速开始 · 管理端」）
@@ -74,6 +74,24 @@
 - Windows（桌面版功能仅限 Windows；纯浏览器模式其他平台也可跑）
 - Python ≥ 3.10（开发环境为 3.13）
 - Node.js ≥ 18（Vite 6 要求）
+
+### 一键管理脚本（推荐）
+
+根目录的 `manage.py` 把编译、启停全部串起来，**Windows / Linux 通用**：
+
+```powershell
+python manage.py build      # 编译前后端所有模块（Python 语法检查 + client + admin_client）
+python manage.py start      # 启动后端（4300 正式库，后台常驻，不占终端）
+python manage.py stop       # 停止后端（只杀 python 进程，不误杀桌面端 liug.exe）
+python manage.py restart    # 重启后端（改了后端代码或配置后生效用）
+python manage.py status     # 查看端口与进程状态
+```
+
+- 首次部署顺序：`pip install -r server/requirements.txt` → `python manage.py build` → `python manage.py start`（`build` 缺 `node_modules` 时自动 `npm install`）
+- 所有命令均可加 `--test` 切换到测试环境（4301 + 独立测试库，见「五、测试环境」）
+- 服务环境变量可在根目录 `config.yaml` 的 `env` 段配置（如管理端 IP 白名单 `LIUG_ADMIN_ALLOWED_IPS`），`start / restart` 时自动读取并注入，**修改后 restart 即生效**；`PORT` 由脚本统一管理，勿在 config.yaml 配置
+- Linux 服务器：在 venv 中运行即可，服务以 `setsid` 后台常驻（SSH 断开仍存活），停止先 SIGTERM 超时再 SIGKILL
+- 运行日志 `data/server.log`，启动失败时脚本自动打印日志末尾便于排查（更多细节见 `run.md`）
 
 ### 1. 安装依赖
 
@@ -124,7 +142,7 @@ npm run build --prefix admin_client   # 需先 npm install --prefix admin_client
 
 - 访问 `http://<host>:4300/admin/`，用管理员账号（默认 `admin`）登录；未构建前端时返回 404 提示
 - 开发模式：`npm run dev --prefix admin_client`（[http://localhost:5181](http://localhost:5181)，`/admin` 代理到 4300）
-- IP 白名单：环境变量 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP / CIDR / `*`，默认 `127.0.0.1,::1` 仅本机）；若需局域网管理，例如：
+- IP 白名单：环境变量 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP / CIDR / `*`；**未配置即不限制**）。推荐在根目录 `config.yaml` 配置（manage.py 注入），手动方式例如：
 
 ```powershell
 $env:LIUG_ADMIN_ALLOWED_IPS='127.0.0.1,::1,192.168.1.0/24'; python server/app.py

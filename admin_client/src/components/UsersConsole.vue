@@ -22,6 +22,12 @@ const resetPassword = ref('');
 const resetError = ref('');
 const resetting = ref(false);
 
+// 修改自己的密码
+const showChangePwd = ref(false);
+const changeForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
+const changeError = ref('');
+const changing = ref(false);
+
 // 通用确认弹层（禁用/启用、角色切换、删除）
 const confirmState = ref(null); // { title, message, confirmText, danger, run }
 const confirming = ref(false);
@@ -92,6 +98,32 @@ async function submitReset() {
     resetError.value = e?.data?.error || '重置失败';
   } finally {
     resetting.value = false;
+  }
+}
+
+/* ---------- 修改自己的密码 ---------- */
+function openChangePwd() {
+  changeForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
+  changeError.value = '';
+  showChangePwd.value = true;
+}
+
+async function submitChangePwd() {
+  if (changing.value) return;
+  if (!changeForm.value.oldPassword) return (changeError.value = '请输入当前密码');
+  if (changeForm.value.newPassword.length < 6) return (changeError.value = '新密码至少需要 6 个字符');
+  if (changeForm.value.newPassword !== changeForm.value.confirmPassword) {
+    return (changeError.value = '两次输入的新密码不一致');
+  }
+  changing.value = true;
+  changeError.value = '';
+  try {
+    await api.changePassword(changeForm.value.oldPassword, changeForm.value.newPassword);
+    showChangePwd.value = false;
+  } catch (e) {
+    changeError.value = e?.data?.error || '修改失败';
+  } finally {
+    changing.value = false;
   }
 }
 
@@ -215,7 +247,7 @@ async function logout() {
               <td class="td-time">{{ fmtTime(u.createdAt) }}</td>
               <td class="td-actions">
                 <template v-if="isSelf(u)">
-                  <span class="self-hint">—</span>
+                  <button class="link-btn" @click="openChangePwd">修改密码</button>
                 </template>
                 <template v-else>
                   <button class="link-btn danger" v-if="!u.disabled" @click="askToggleDisable(u)">禁用</button>
@@ -277,6 +309,33 @@ async function logout() {
         </label>
         <div class="form-hint">重置后该用户所有已登录的会话将立即失效</div>
         <div class="form-error" v-if="resetError">{{ resetError }}</div>
+      </div>
+    </GlassModal>
+
+    <!-- 修改自己的密码 -->
+    <GlassModal
+      v-if="showChangePwd"
+      title="修改密码"
+      confirm-text="修改"
+      :loading="changing"
+      @confirm="submitChangePwd"
+      @close="showChangePwd = false"
+    >
+      <div class="form">
+        <label class="form-field">
+          <span class="form-label">当前密码</span>
+          <input v-model="changeForm.oldPassword" class="g-input" type="password" placeholder="输入当前密码" autocomplete="current-password" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">新密码</span>
+          <input v-model="changeForm.newPassword" class="g-input" type="password" placeholder="至少 6 个字符" autocomplete="new-password" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">确认新密码</span>
+          <input v-model="changeForm.confirmPassword" class="g-input" type="password" placeholder="再次输入新密码" autocomplete="new-password" @keydown.enter="submitChangePwd" />
+        </label>
+        <div class="form-hint">修改后其他设备登录的会话将立即失效，当前管理端会话保持不变</div>
+        <div class="form-error" v-if="changeError">{{ changeError }}</div>
       </div>
     </GlassModal>
 
@@ -393,7 +452,6 @@ tr.off .uname { color: var(--grey-40); text-decoration: line-through; text-decor
 .td-actions { white-space: nowrap; }
 .th-actions { text-align: right; }
 .td-actions { text-align: right; }
-.self-hint { color: var(--grey-40); }
 .empty { text-align: center; color: var(--grey-40); padding: 32px 0 !important; }
 
 /* 表单 */

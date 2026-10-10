@@ -25,4 +25,7 @@ export const api = {
   createUser: (payload) => req('POST', '/admin/users', payload),
   updateUser: (id, patch) => req('PATCH', `/admin/users/${id}`, patch),
   deleteUser: (id) => req('DELETE', `/admin/users/${id}`),
+
+  changePassword: (oldPassword, newPassword) =>
+    req('POST', '/admin/change-password', { oldPassword, newPassword }),
 };

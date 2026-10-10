@@ -114,6 +114,25 @@ def admin_me(user=Depends(get_admin_user)):
     return {'user': users.public_user(user)}
 
 
+@router.post('/admin/change-password')
+def admin_change_password(payload: dict = Body(default={}), admin=Depends(get_admin_user)):
+    """管理员修改自己的密码（与主应用 /api/auth/change-password 口径一致：
+    验证原密码 → 更新哈希 → 吊销全部旧会话 → 重签当前会话，管理端不被踢出）"""
+    if not users.verify_password(payload.get('oldPassword'), admin['password_hash']):
+        raise ApiError(400, '原密码错误')
+    new_password = payload.get('newPassword')
+    if not isinstance(new_password, str) or len(new_password) < 6:
+        raise ApiError(400, '新密码至少需要 6 个字符')
+    users.update_password_hash(admin['id'], users.hash_password(new_password))
+    users.revoke_all_sessions(admin['id'])
+    resp = JSONResponse({'ok': True})
+    resp.set_cookie(
+        users.SESSION_COOKIE, users.sign_session(admin['id']),
+        path='/', httponly=True, samesite='lax', max_age=users.SESSION_TTL,
+    )
+    return resp
+
+
 # ---------- 用户管理 API ----------
 def _clean_username(username):
     name = str(username or '').strip()
