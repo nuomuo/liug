@@ -8,6 +8,7 @@ __pycache__/
 # Build output
 client/dist/
 admin-client/dist/
+admin_client/dist/
 
 # PyInstaller 打包产物（quadrant.exe）
 build/
@@ -34,7 +35,6 @@ Thumbs.db
 .idea/
 *.swp
 example/
-doc/
 skills/
 server-node-backup/*
 system-admin-flask-backup/*

@@ -3,7 +3,7 @@
 ## 架构说明（前后端分离 + 业务核心下沉）
 
 - **业务核心 `core/`（双端共享，不含认证与桌面逻辑）**：`db.py`（每用户 SQLite 数据层：业务表含 `guid`/`updated_at` 列，触发器自动补全与触碰、硬删除写 `_sync_tombstones` 墓碑，老库打开时自动迁移）、`routes.py`（/api/* 业务路由，鉴权通过 `get_user_id` 依赖注入；含 `POST /api/sync` 同步端点）、`sync.py`（同步核心：快照构建 / LWW 合并 / 幂等应用，guid 空间 + FK 重映射 + 拓扑插入）、`app_factory.py`（FastAPI 组装工厂：业务路由 + 认证路由 + 额外路由 + SPA 静态托管）、`auth.py`（scrypt/HMAC 纯函数）、`errors.py`、`holidays.py`、`import_csv.py`。用户数据目录由 `LIUG_USERS_DIR` 指定（惰性解析），静态资源目录由 `LIUG_DIST_DIR` 指定。
-- **远程后端 `server/`（唯一保留用户管理的地方）**：入口 `server/app.py`，组装 core + 账户体系（`users.py` 多用户主库 + `routes_auth.py` 认证路由），托管 `client/dist` 静态站点。依赖见 `server/requirements.txt`。多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`。
+- **远程后端 `server/`（唯一保留用户管理的地方）**：入口 `server/app.py`，组装 core + 账户体系（`users.py` 多用户主库 + `routes_auth.py` 认证路由）+ 管理端路由（`routes_admin.py`，/admin 前缀 API 与管理页托管），托管 `client/dist` 静态站点。依赖见 `server/requirements.txt`。多用户版：`data/users.db` 为用户主库（账户/密码/角色），每个用户的数据存放在 `data/users/<用户唯一ID>.db` 独立 SQLite 文件中。密码哈希（scrypt，`scrypt$salt$hash`）与会话（HMAC 签名 Cookie + `sessions_since`）口径与旧 Node 版完全互通；主应用会话密钥复用 `data/users.db.secret`。
 - 前端为 Vue3 + Vite（`client/`），构建产物在 `client/dist/`；前端改动后需 `npm run build --prefix client`。
 - **桌面客户端 `desktop/`（不含用户管理，账户体系不进 exe）**：`main.py` 为整应用启动器（单进程 = 系统托盘 pystray + 主界面窗口 + 可选四象限小组件 + 内嵌 uvicorn，**粘性动态端口**：上次端口 → 4300 → 随机，socket 预绑定消除竞态，端口记录在 `<data>/service-port.json` 供小组件发现；Windows 互斥体单实例防双开；主窗口点 × 隐藏到托盘，托盘「退出」才结束；应用显示名统一为「流光 LIUG」，对外可见的名称必须使用「流光 LIUG」，不得使用其他名称）。认证用 `local_auth.py`：
   - **单机模式**：`POST /api/auth/local` 免密签发固定 `LOCAL_UID='local'` 会话（TTL 10 年，密钥 `<data>/local.secret`，登出为进程内内存吊销）；业务数据在 `<LIUG_USERS_DIR>/local.db` 单文件；`/api/auth/me` 返回 user 带 `mode='standalone'` 供前端识别。
@@ -50,8 +50,10 @@ LIUG_DB_PATH=data/schedule.test.db python core/import_csv.py <csv路径>
 
 ## 用户管理
 
-用户管理模块（独立前端 `admin-client/` 与 `/system/*` JSON API、`/system-admin/` 管理页）已整体移除，项目不再包含任何用户管理代码：
+用户管理通过独立的「管理端」模块提供，仅远程后端（`server/`）具备，桌面端 exe 不包含：
 
-- Vue client（`client/`）不包含任何用户管理代码；`server/` 下无 `routes_system.py`。
-- 账户体系仍保留：登录态使用 Cookie `liug_session` 与密钥 `data/users.db.secret`（多用户数据隔离见上文）。
-- 若需增删用户/重置密码，需直接维护 `data/users.db`（须用户明确授权）。
+- **后端 `server/routes_admin.py`**：`/admin` 前缀 API（login/logout/me/users 增删改），复用主应用会话体系（同一 Cookie `liug_session`、`data/users.db.secret`、`sessions_since`/`revoked_sessions` 口径）；同时把 `admin_client/dist` 托管在 `/admin/` 路径（API 路由先注册，静态 catch-all 后注册；dist 可由 `LIUG_ADMIN_DIST_DIR` 覆盖，未构建时返回 404 提示）。
+- **前端 `admin_client/`**：独立 Vue3 + Vite 工程（与 `client/` 完全隔离，不被 PyInstaller 打包，`liug.spec` 的 `excludes` 已排除 `routes_admin`）。构建：`npm run build --prefix admin_client`（生产 `base: '/admin/'`，开发 5181 端口 + proxy）；访问地址 `http://<host>:4300/admin/`。
+- **双重防线**：① IP 白名单 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP/CIDR/`*`，默认 `127.0.0.1,::1`；白名单外访问任何 /admin 资源——含页面与登录——一律 403，不影响主应用）；② 会话校验 + `role='admin'`（非管理员即使已登录也 403）。管理端有独立登录页，登录时即校验管理员角色。
+- **保护规则**：不能对自己执行禁用/降级/删除；系统至少保留一个可用管理员（`admin_count()`）；重置密码后吊销目标用户全部会话；删除用户保留其 `data/users/<uid>.db` 数据文件。
+- 主应用前端（`client/`）与管理端互不包含：管理功能只走 /admin 前缀接口。

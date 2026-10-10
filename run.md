@@ -11,6 +11,9 @@ pip install -r server/requirements.txt
 
 # 2. 安装前端依赖（主应用）
 npm install --prefix client
+
+# 3. 安装管理端前端依赖（可选，需要用户管理功能时安装）
+npm install --prefix admin_client
 ```
 
 ## 二、启动后端（必须）
@@ -47,6 +50,31 @@ npm run build --prefix client
 ```
 
 构建产物输出到 `client/dist/`，刷新 [http://localhost:4300](http://localhost:4300) 即生效。
+
+### 管理端（用户管理，可选）
+
+独立的用户管理控制台，仅服务器端提供（桌面 exe 不包含）。首次使用需安装依赖并构建：
+
+```powershell
+npm run build --prefix admin_client    # 需先 npm install --prefix admin_client
+```
+
+- 访问 [http://localhost:4300/admin/](http://localhost:4300/admin/)，用管理员账号（默认 `admin`）登录
+- 功能：新增用户、启用/禁用、重置密码、切换管理员/普通角色、删除用户；不能对自己禁用/降级/删除，系统至少保留一个可用管理员
+- **IP 白名单**：环境变量 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP / CIDR / `*`，默认 `127.0.0.1,::1` 仅本机）；白名单外访问任何 /admin 资源（含页面与登录）一律 403，不影响主应用。例如放行局域网：
+
+```powershell
+$env:LIUG_ADMIN_ALLOWED_IPS='127.0.0.1,::1,192.168.1.0/24'; python server/app.py
+```
+
+- 开发模式（改管理端前端代码时用，热更新）：
+
+```powershell
+npm run dev --prefix admin_client
+```
+
+- 开发服务器 [http://localhost:5181](http://localhost:5181)（`/admin` 自动代理到 4300，**需先启动后端**）
+- 静态资源目录可用 `LIUG_ADMIN_DIST_DIR` 覆盖（默认 `admin_client/dist`）；未构建时访问 /admin/ 返回 404 提示
 
 ## 四、桌面四象限小组件（可选）
 
@@ -102,7 +130,7 @@ python -m PyInstaller --noconfirm liug.spec
 ```powershell
 # 主应用测试服务器（4301，首次启动自动创建测试管理员 admin / admin123）
 $env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
-# 访问 http://localhost:4301
+# 访问 http://localhost:4301（管理端测试：http://localhost:4301/admin/）
 
 # 导入外部清单应用备份 CSV 到测试库
 $env:LIUG_DB_PATH='data/schedule.test.db'; python core/import_csv.py <csv路径>

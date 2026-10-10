@@ -2,7 +2,8 @@
 
 - 密码 scrypt、会话 HMAC 令牌等纯函数复用 core/auth.py
 - 会话密钥：主应用复用 <用户主库>.secret（沿用旧 Node 后端密钥文件，已有登录态迁移后不失效）
-- 首次启动 bootstrap：默认 admin/admin123 + 旧单用户库只读迁移（VACUUM INTO，不改原文件）
+- 首次启动 bootstrap（幂等）：数据目录 + 用户主库 + .secret + 默认 admin/admin123 及其独立数据库，
+  存在旧单用户库时改为只读迁移（VACUUM INTO，不改原文件）
 """
 import os
 import sqlite3
@@ -28,6 +29,20 @@ USERS_DB_PATH = Path(os.environ.get('LIUG_USERS_DB_PATH') or (DATA_DIR / 'users.
 
 SESSION_COOKIE = 'liug_session'
 SESSION_TTL = SESSION_TTL
+
+
+def ensure_data_dirs():
+    """初始化第 0 步：建好数据目录（sqlite 不会自动创建父目录，全新部署时 data/ 可能不存在）
+
+    - 用户主库所在目录（data/，或 LIUG_USERS_DB_PATH 重定向的目录）
+    - 用户数据目录（data/users/，或 LIUG_USERS_DIR 重定向的目录）
+    """
+    USERS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db.users_dir()
+
+
+# 必须在生成 .secret（写文件）之前建好目录，全新部署才能正常导入本模块
+ensure_data_dirs()
 
 
 def _connect():
@@ -236,21 +251,34 @@ def public_user(u):
     }
 
 
-# ---------- 首次启动：默认管理员 + 旧单库数据迁移 ----------
+# ---------- 初次启动：初始化全部所需 sqlite 文件（幂等，可重复调用） ----------
 def bootstrap_users(legacy_db_path=None):
+    """初次启动 server 时完成数据库初始化，需要的文件一次建好：
+
+    1. 数据目录：data/ 与 data/users/（ensure_data_dirs，导入本模块时已执行一次）
+    2. 用户主库 data/users.db：表结构（users / revoked_sessions）
+    3. 会话密钥 data/users.db.secret（导入本模块时已就绪）
+    4. 库中无任何用户时：创建默认管理员 admin/admin123，并建好其独立数据库
+       data/users/<uid>.db（含默认清单与预置节日）；生产环境存在旧正式库
+       schedule.db 时改为只读迁移（VACUUM INTO，不修改原文件）
+    """
+    ensure_data_dirs()
     init_users_db()
+
     conn = _connect()
     try:
         n = conn.execute('SELECT COUNT(*) AS n FROM users').fetchone()['n']
     finally:
         conn.close()
     if n > 0:
-        return
+        return  # 已初始化过，幂等退出
 
     uid = str(uuid.uuid4())
     insert_user(uid, 'admin', hash_password('admin123'), 'admin')
     admin = find_user_by_id(uid)
+    print('[users] 已创建默认管理员账户：admin / admin123（请尽快修改密码）')
 
+    migrated = False
     # 生产环境（未重定向用户主库）且存在旧正式库时，把旧数据只读复制为 admin 的用户库。
     # 仅读取 schedule.db（VACUUM INTO），不修改、不删除原文件。
     if not os.environ.get('LIUG_USERS_DB_PATH') and legacy_db_path and Path(legacy_db_path).exists():
@@ -261,7 +289,13 @@ def bootstrap_users(legacy_db_path=None):
                 src.execute(f"VACUUM INTO '{str(dest).replace(chr(39), chr(39) * 2)}'")
             finally:
                 src.close()
-            print('[users] 已将原有 schedule.db 数据迁移为 admin 账户的独立数据库')
+            migrated = True
+            print(f'[users] 已将原有数据迁移为 admin 账户的独立数据库：{dest}')
         except Exception as e:
             print(f'[users] 旧数据迁移失败（将使用全新的 admin 数据库）: {e}')
-    print('[users] 已创建默认管理员账户：admin / admin123（请尽快修改密码）')
+
+    if not migrated:
+        # 全新部署（或迁移失败兜底）：直接建好 admin 的独立数据库，登录即可用
+        with db.user_db_ctx(admin['id']) as conn:
+            db.ensure_default_data(conn)
+        print(f'[users] 已初始化默认管理员的独立数据库：{db.user_db_path(admin["id"])}')

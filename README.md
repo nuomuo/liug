@@ -1,24 +1,32 @@
 # 流光 LIUG
 
+> 全程 vibecoding 的产物，感谢 **TRAE、GLM-5.3、DEEPSEEK-V4** 对本项目的大力支持
+> 功能设计参考 **滴答清单**
+> 前端设计使用了 **Skills For Designers and Engineers**  [github.com/emilkowalski/skills.git](https://github.com/emilkowalski/skills.git)
+
 自托管的日程管理应用：以月/周日历为核心，任务清单、四象限、倒数日一站式管理；玻璃质感 UI（主色 #484553、灰阶 rgba(25,25,25,x)、背景照片、48 个 SVG 图标）。
 
 - **前后端分离**：前端 Vue 3 + Vite，后端 Python FastAPI + SQLite（多用户，每人独立数据库文件）
 - **可纯浏览器使用**：一个命令启动服务，访问 `http://localhost:4300` 即可
 - **Windows 桌面版**：打包为单个 `liug.exe`（系统托盘常驻 + 主界面 + 桌面四象限小组件）
 
+![1791600790562](doc/image/README/1791600790562.png)
+
+![1791600806085](doc/image/README/1791600806085.png)
+
 ## 一、功能特性
 
 ### 主应用（浏览器）
 
-| 模块 | 说明 |
-| --- | --- |
-| 任务 | 清单列表视图：按清单筛选、显示已完成、过期红字 |
-| 日历 | 本应用核心：月/周视图、迷你月历（农历/节气/法定节假日图标）、清单/标签筛选 |
+| 模块   | 说明                                                                       |
+| ------ | -------------------------------------------------------------------------- |
+| 任务   | 清单列表视图：按清单筛选、显示已完成、过期红字                             |
+| 日历   | 本应用核心：月/周视图、迷你月历（农历/节气/法定节假日图标）、清单/标签筛选 |
 | 四象限 | 艾森豪威尔矩阵（重要×紧急），任务可跨象限拖拽（自动改写优先级与截止日期） |
-| 倒数日 | 纪念日/倒数日/生日/节日卡片，支持农历与每年重复，预置 8 个节日 |
-| 搜索 | Ctrl+K 全局搜索标题/备注/标签 |
-| 设置 | 主题颜色自定义（8 预设 + 自定义取色器），即时生效并持久化 |
-| 账户 | 多用户登录（scrypt 密码哈希 + HMAC 签名 Cookie 会话），每人数据独立库隔离 |
+| 倒数日 | 纪念日/倒数日/生日/节日卡片，支持农历与每年重复，预置 8 个节日             |
+| 搜索   | Ctrl+K 全局搜索标题/备注/标签                                              |
+| 设置   | 主题颜色自定义（8 预设 + 自定义取色器），即时生效并持久化                  |
+| 账户   | 多用户登录（scrypt 密码哈希 + HMAC 签名 Cookie 会话），每人数据独立库隔离  |
 
 ### 月/周视图细节
 
@@ -41,15 +49,23 @@
 - 图钉置顶切换、玻璃白/主题色/暗色三档配色、位置/尺寸/置顶记忆（`data/widget.json`）
 - 与主界面窗口通过 storage 事件实时双向同步；未登录时显示提示卡可一键唤起主窗口登录
 
+### 管理端（/admin/，仅管理员）
+
+- 独立的用户管理控制台：新增用户、启用/禁用、重置密码、切换管理员/普通角色、删除用户
+- 双重防线：IP 白名单（`LIUG_ADMIN_ALLOWED_IPS`，默认仅本机）+ 独立登录页校验管理员角色，白名单外连页面都打不开（403），不影响主应用
+- 复用主应用会话体系（同一 Cookie 与密钥）；重置密码后目标用户全部会话即时失效
+- 保护规则：不能对自己禁用/降级/删除，系统至少保留一个可用管理员；删除用户保留其数据文件
+- 独立前端工程 `admin_client/`，不打包进桌面 exe（详见「快速开始 · 管理端」）
+
 ## 二、技术栈
 
-| 层 | 技术 |
-| --- | --- |
-| 前端 | Vue 3.5 `<script setup>`、Vite 6 |
-| 后端 | Python FastAPI + uvicorn + SQLite（WAL、软删除） |
-| 农历/节日 | lunar-javascript（农历/节气/传统节日）+ 内置法定节假日 |
-| 桌面壳 | pywebview（WebView2）+ pystray（托盘）+ PyInstaller 打包 |
-| 图标 | 内置 48 个 SVG symbol（雪碧图，`<use>` 引用） |
+| 层        | 技术                                                     |
+| --------- | -------------------------------------------------------- |
+| 前端      | Vue 3.5`<script setup>`、Vite 6                        |
+| 后端      | Python FastAPI + uvicorn + SQLite（WAL、软删除）         |
+| 农历/节日 | lunar-javascript（农历/节气/传统节日）+ 内置法定节假日   |
+| 桌面壳    | pywebview（WebView2）+ pystray（托盘）+ PyInstaller 打包 |
+| 图标      | 内置 48 个 SVG symbol（雪碧图，`<use>` 引用）          |
 
 ## 三、快速开始
 
@@ -65,14 +81,18 @@
 # 远程后端依赖（fastapi / uvicorn / httpx / regex）
 pip install -r server/requirements.txt
 
-# 前端依赖
+# 前端依赖（主应用）
 npm install --prefix client
+
+# 管理端前端依赖（可选，需要用户管理功能时安装）
+npm install --prefix admin_client
 ```
 
 ### 2. 构建前端
 
 ```powershell
-npm run build --prefix client      # 产出 client/dist/
+npm run build --prefix client       # 产出 client/dist/（主应用）
+npm run build --prefix admin_client # 产出 admin_client/dist/（管理端，可选）
 ```
 
 ### 3. 启动服务
@@ -81,7 +101,7 @@ npm run build --prefix client      # 产出 client/dist/
 python server/app.py               # 或 npm run server --prefix client
 ```
 
-打开 [http://localhost:4300](http://localhost:4300)，首次启动自动创建默认管理员：
+打开 [http://localhost:4300](http://localhost:4300)。首次启动自动完成数据库初始化（无需手动建库）：自动创建 `data/` 目录、用户主库 `data/users.db`、会话密钥 `data/users.db.secret` 与默认管理员的独立数据库，并创建默认管理员：
 
 - 账号 `admin` / 密码 `admin123`（请尽快修改密码）
 
@@ -93,6 +113,24 @@ python server/app.py               # 或 npm run server --prefix client
 python server/app.py               # 终端 1：后端
 npm run dev --prefix client        # 终端 2：开发服务器 http://localhost:5180（/api 代理到 4300）
 ```
+
+### 管理端（用户管理，可选）
+
+管理端是独立的用户管理控制台，部署在服务器上供管理员使用（桌面 exe 不包含）：
+
+```powershell
+npm run build --prefix admin_client   # 需先 npm install --prefix admin_client
+```
+
+- 访问 `http://<host>:4300/admin/`，用管理员账号（默认 `admin`）登录；未构建前端时返回 404 提示
+- 开发模式：`npm run dev --prefix admin_client`（[http://localhost:5181](http://localhost:5181)，`/admin` 代理到 4300）
+- IP 白名单：环境变量 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP / CIDR / `*`，默认 `127.0.0.1,::1` 仅本机）；若需局域网管理，例如：
+
+```powershell
+$env:LIUG_ADMIN_ALLOWED_IPS='127.0.0.1,::1,192.168.1.0/24'; python server/app.py
+```
+
+- 静态资源目录可用 `LIUG_ADMIN_DIST_DIR` 覆盖（默认 `admin_client/dist`）
 
 ### 导入外部清单应用 CSV 备份（可选）
 
@@ -148,7 +186,7 @@ python desktop/desktop_widget.py    # 需先执行过 npm run build --prefix cli
 ```powershell
 # 测试服务器（端口 4301，首次启动自动创建测试管理员 admin / admin123）
 $env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
-# 访问 http://localhost:4301
+# 访问 http://localhost:4301（管理端测试：http://localhost:4301/admin/）
 
 # 测试库导入外部清单 CSV
 $env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路径>
@@ -164,6 +202,8 @@ $env:LIUG_DB_PATH='data/schedule.test.db'; python server/import_csv.py <csv路�
 
 ## 七、目录结构
 
+![1791603662713](image/README/1791603662713.png)
+
 ```
 liug/
 ├── liug.spec                # PyInstaller 打包配置（桌面版整应用，入口 desktop/main.py）
@@ -178,9 +218,10 @@ liug/
 │   ├── holidays.py          # 法定节假日
 │   └── errors.py            # 统一错误 {"error": 中文}
 ├── server/                  # 远程后端（唯一保留用户管理的地方）
-│   ├── app.py               # 入口：组装 core + 账户体系 + 托管 client/dist
+│   ├── app.py               # 入口：组装 core + 账户体系 + 管理端路由 + 托管 client/dist
 │   ├── users.py             # 多用户账户体系（登录/会话/用户库隔离）
 │   ├── routes_auth.py       # 认证路由（login/logout/me/change-password）
+│   ├── routes_admin.py      # 管理端路由（/admin API + IP 白名单 + admin_client/dist 托管）
 │   └── requirements.txt
 ├── desktop/                 # 桌面客户端（不含用户管理，账户体系不进 exe）
 │   ├── main.py              # 桌面版整应用（托盘+主窗+小组件+内嵌服务，粘性动态端口）
@@ -190,7 +231,7 @@ liug/
 │   ├── widget_window.py     # 小组件窗口 Win32 拖动/缩放辅助
 │   ├── assets/liug.ico
 │   └── requirements.txt
-└── client/                  # Vue3 + Vite 前端
+├── client/                  # Vue3 + Vite 前端
     └── src/
         ├── App.vue          # 布局壳（背景/弹层/快捷键）
         ├── store.js         # 全局响应式状态 + 任务操作 + 主题色
@@ -202,6 +243,12 @@ liug/
             ├── MatrixPage.vue（四象限）、FocusPage.vue、CountdownPage.vue、ListPage.vue
             ├── QuadrantWidget.vue（桌面小组件页面）
             └── MarkdownEditor.vue、DatePicker.vue、GlassSelect.vue（通用组件）
+└── admin_client/            # 管理端独立前端（Vue3 + Vite，不打包进 exe）
+    └── src/
+        ├── App.vue          # 会话探测 → 登录页 / 用户控制台
+        ├── api.js           # /admin REST 封装
+        ├── style.css        # 玻璃风格变量
+        └── components/      # AdminLogin.vue、UsersConsole.vue、GlassModal.vue
 ```
 
 ## 八、常见问题

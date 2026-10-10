@@ -54,8 +54,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # 用户管理（server/users.py 账户体系）不打包进 exe：desktop 不引用它，此处显式排除兜底
-    excludes=['users', 'routes_api', 'routes_system'],
+    # 用户管理（server/users.py 账户体系 + server/routes_admin.py 管理端）不打包进 exe：
+    # desktop 不引用它们，此处显式排除兜底
+    excludes=['users', 'routes_api', 'routes_system', 'routes_admin'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

@@ -1,0 +1,135 @@
+/* ============================================================
+   流光 LIUG 管理端 —— 液态玻璃风格（与主应用设计语言一致，自包含）
+   ============================================================ */
+:root {
+  --primary-color: #4a6cf7;
+  --primary-hover-color: #6581f9;
+  --front-color: #1d1d1f;
+  --front-color-rgb: 29, 29, 31;
+  --grey-40: rgba(29, 29, 31, 0.4);
+  --grey-50: rgba(29, 29, 31, 0.5);
+  --grey-60: rgba(29, 29, 31, 0.6);
+  --grey-80: rgba(29, 29, 31, 0.8);
+  --green: #0fbf7f;
+  --warn-red: #e03131;
+
+  --glass-panel-bg: rgba(255, 255, 255, 0.62);
+  --glass-panel-blur: blur(28px) saturate(180%);
+  --glass-heavy-bg: rgba(255, 255, 255, 0.82);
+  --glass-heavy-blur: blur(36px) saturate(190%);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shadow-float:
+    0 2px 2px rgba(20, 20, 30, 0.05),
+    0 12px 32px rgba(20, 20, 40, 0.14),
+    0 32px 80px rgba(20, 20, 40, 0.16);
+
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; width: 100%; }
+
+body {
+  font-family: var(--font-family);
+  color: var(--front-color);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden auto;
+  background:
+    radial-gradient(1200px 600px at 12% -8%, rgba(74, 108, 247, 0.16), transparent 60%),
+    radial-gradient(900px 520px at 96% 8%, rgba(15, 191, 127, 0.10), transparent 55%),
+    linear-gradient(160deg, #f4f6fc 0%, #eef0f7 45%, #f6f7fb 100%);
+  background-attachment: fixed;
+}
+
+button { font-family: inherit; background: none; border: none; cursor: pointer; color: inherit; }
+input { font-family: inherit; outline: none; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: rgba(29, 29, 31, 0.14); border-radius: 3px; }
+
+/* ---------- 通用控件 ---------- */
+.g-btn {
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover-color));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: filter 0.15s, transform 0.1s ease-out, opacity 0.15s;
+  box-shadow: 0 5px 14px rgba(74, 108, 247, 0.3);
+}
+.g-btn:hover { filter: brightness(1.06); }
+.g-btn:active { transform: scale(0.98); }
+.g-btn:disabled { opacity: 0.55; cursor: default; }
+.g-btn.ghost {
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--grey-80);
+  box-shadow: none;
+}
+.g-btn.ghost:hover { border-color: var(--primary-color); color: var(--primary-color); }
+.g-btn.danger {
+  background: linear-gradient(135deg, #e13e39, #ef5a50);
+  box-shadow: 0 5px 14px rgba(224, 49, 49, 0.28);
+}
+
+.g-input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--front-color);
+  background: rgba(255, 255, 255, 0.66);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.g-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(74, 108, 247, 0.18);
+}
+
+/* 行内文字按钮（表格操作列） */
+.link-btn {
+  font-size: 12px;
+  color: var(--primary-color);
+  padding: 3px 8px;
+  border-radius: 7px;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.link-btn:hover { background: rgba(74, 108, 247, 0.1); }
+.link-btn.warn { color: #d97706; }
+.link-btn.warn:hover { background: rgba(217, 119, 6, 0.1); }
+.link-btn.danger { color: var(--warn-red); }
+.link-btn.danger:hover { background: rgba(224, 49, 49, 0.09); }
+
+/* 状态 / 角色 胶囊 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill.ok { color: #0a8f5f; background: rgba(15, 191, 127, 0.14); }
+.pill.off { color: #c92a2a; background: rgba(224, 49, 49, 0.12); }
+.pill.admin { color: #3b5bdb; background: rgba(74, 108, 247, 0.13); }
+.pill.user { color: var(--grey-60); background: rgba(29, 29, 31, 0.06); }
