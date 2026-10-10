@@ -34,6 +34,22 @@ python manage.py status     # 查看端口与进程状态
 - 所有命令均可加 `--test` 切换到测试环境（见「七、测试环境」）
 - **Linux 服务器部署**：在 venv 中运行 `python manage.py start`，服务以 `setsid` 后台常驻，SSH 断开后仍存活；停止时先 SIGTERM 优雅退出、超时再 SIGKILL；端口探测依赖 `ss`（或老系统 `netstat`），非 root 用户查看他人进程需 `sudo`
 
+### 服务环境变量：config.yaml
+
+`start / restart` 会读取根目录 `config.yaml` 的 `env` 段并注入为服务进程的环境变量，**修改后 restart 即生效**（无需 export，服务器上也不必装 PyYAML——内置了简易解析，只支持 `env` 段下的 `KEY: value` 与注释）：
+
+```yaml
+env:
+  # 管理端 /admin 的 IP 白名单：逗号分隔，支持单 IP / CIDR 网段（192.168.1.0/24）/ * 全放行
+  # 不配置（注释掉）= 不做限制，任意 IP 可访问 /admin
+  # LIUG_ADMIN_ALLOWED_IPS: "127.0.0.1,::1,203.0.113.10"
+```
+
+- 配置文件优先于 shell 中已 export 的同名变量（配置文件即唯一真相源）；启动时会打印实际注入的每个变量
+- `LIUG_ADMIN_ALLOWED_IPS` **不配置即不限制**（任意 IP 可访问 /admin，仍有账号密码 + 管理员角色防线）；配置后仅放行名单内来源，名单外访问 /admin 一律 403
+- 更稳妥的公网管理方式：用 SSH 隧道 `ssh -L 4300:localhost:4300 root@服务器` 后本地访问 `http://localhost:4300/admin/`，无需对外放行
+- 注意：反向代理（nginx 等）部署时后端看到的来源是代理 IP，配置了白名单需把代理 IP 一并加入或直连端口访问；`PORT` 由 manage.py 统一管理（4300/4301），在 config.yaml 里配置会被忽略并警告
+
 ## 三、启动后端（手动方式，必须了解）
 
 后端同时提供 API 并托管前端构建产物，**日常使用只需启动它**：

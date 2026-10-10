@@ -15,6 +15,9 @@
 
     Linux（服务器部署）：服务以 setsid 方式后台启动，SSH 断开后仍存活；
     stop 先发 SIGTERM 优雅退出，超时再 SIGKILL 强制终止。
+
+    服务环境变量可在根目录 config.yaml 的 env 段配置（如管理端 IP 白名单
+    LIUG_ADMIN_ALLOWED_IPS），start / restart 时自动读取并注入，修改后 restart 即生效。
 """
 import argparse
 import compileall
@@ -193,6 +196,58 @@ def cmd_build(_args):
     return 0
 
 
+# ---------------------------------------------------------------- 配置文件
+
+CONFIG_FILE = ROOT / 'config.yaml'
+
+
+def _parse_env_section(text):
+    """无 PyYAML 时的简易解析：仅支持顶层 env: 段下缩进的 KEY: value（# 注释、可选引号）。"""
+    result = {}
+    in_env = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        if not raw[0].isspace():          # 顶层键
+            in_env = stripped == 'env:'
+            continue
+        if not in_env or ':' not in stripped:
+            continue
+        key, _, value = stripped.partition(':')
+        key, value = key.strip(), value.strip()
+        # 去掉行内注释（# 前有空白才算，避免误伤值中的 #）
+        for i, ch in enumerate(value):
+            if ch == '#' and i > 0 and value[i - 1].isspace():
+                value = value[:i].rstrip()
+                break
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        if key and value:
+            result[key] = value
+    return result
+
+
+def load_env_config(path=CONFIG_FILE):
+    """读取 config.yaml 的 env 段 → {环境变量名: 字符串值}；文件不存在或格式异常返回 {}。"""
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return {}
+    try:
+        import yaml  # type: ignore
+        data = yaml.safe_load(text) or {}
+    except ImportError:
+        data = _parse_env_section(text)
+    if not isinstance(data, dict):
+        return {}
+    env_map = data.get('env') or {}
+    if not isinstance(env_map, dict):
+        return {}
+    # YAML 可能解析出 int/bool 等标量，统一转字符串
+    return {str(k): str(v) for k, v in env_map.items() if k and v is not None}
+
+
 # ---------------------------------------------------------------- start / stop
 
 def cmd_start(args):
@@ -207,9 +262,19 @@ def cmd_start(args):
         return 1
 
     env = os.environ.copy()
+    # config.yaml 的 env 段：配置文件优先于 shell 遗留变量（配置文件即唯一真相源）
+    env_overrides = load_env_config()
+    if env_overrides.pop('PORT', None) is not None:
+        print('[警告] config.yaml 中的 PORT 已忽略：端口由 manage.py 统一管理（默认 4300，--test 为 4301）')
+    if env_overrides:
+        print(f'[配置] 从 config.yaml 注入 {len(env_overrides)} 个环境变量：')
+        for key, value in env_overrides.items():
+            print(f'    {key}={value}')
+            env[key] = value
     env['PYTHONIOENCODING'] = 'utf-8'
     if args.test:
-        # 必须与启动命令放在同一次进程环境中，绝不依赖终端残留变量
+        # 必须与启动命令放在同一次进程环境中，绝不依赖终端残留变量；
+        # --test 的三个变量最后强制覆盖，防止 config.yaml 把测试环境指向正式库
         env['LIUG_USERS_DB_PATH'] = str(ROOT / 'data' / 'users.test.db')
         env['LIUG_USERS_DIR'] = str(ROOT / 'data' / 'users-test')
         env['PORT'] = str(TEST_PORT)

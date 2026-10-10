@@ -54,6 +54,6 @@ LIUG_DB_PATH=data/schedule.test.db python core/import_csv.py <csv路径>
 
 - **后端 `server/routes_admin.py`**：`/admin` 前缀 API（login/logout/me/users 增删改），复用主应用会话体系（同一 Cookie `liug_session`、`data/users.db.secret`、`sessions_since`/`revoked_sessions` 口径）；同时把 `admin_client/dist` 托管在 `/admin/` 路径（API 路由先注册，静态 catch-all 后注册；dist 可由 `LIUG_ADMIN_DIST_DIR` 覆盖，未构建时返回 404 提示）。
 - **前端 `admin_client/`**：独立 Vue3 + Vite 工程（与 `client/` 完全隔离，不被 PyInstaller 打包，`liug.spec` 的 `excludes` 已排除 `routes_admin`）。构建：`npm run build --prefix admin_client`（生产 `base: '/admin/'`，开发 5181 端口 + proxy）；访问地址 `http://<host>:4300/admin/`。
-- **双重防线**：① IP 白名单 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP/CIDR/`*`，默认 `127.0.0.1,::1`；白名单外访问任何 /admin 资源——含页面与登录——一律 403，不影响主应用）；② 会话校验 + `role='admin'`（非管理员即使已登录也 403）。管理端有独立登录页，登录时即校验管理员角色。
+- **双重防线**：① IP 白名单 `LIUG_ADMIN_ALLOWED_IPS`（逗号分隔，支持 IP/CIDR/`*`；**未配置或为空时不做限制**，配置后名单外访问任何 /admin 资源——含页面与登录——一律 403，不影响主应用；可经根目录 config.yaml 的 env 段配置，由 manage.py 注入）；② 会话校验 + `role='admin'`（非管理员即使已登录也 403）。管理端有独立登录页，登录时即校验管理员角色。
 - **保护规则**：不能对自己执行禁用/降级/删除；系统至少保留一个可用管理员（`admin_count()`）；重置密码后吊销目标用户全部会话；删除用户保留其 `data/users/<uid>.db` 数据文件。
 - 主应用前端（`client/`）与管理端互不包含：管理功能只走 /admin 前缀接口。

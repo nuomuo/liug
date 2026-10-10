@@ -2,9 +2,9 @@
 
 - 仅 server/app.py 以 extra_routers 装配；桌面端不 import 本模块，exe 不打包（liug.spec excludes 兜底）
 - 双重防线：
-  1. IP 白名单：环境变量 LIUG_ADMIN_ALLOWED_IPS（逗号分隔 IP 或 CIDR，默认仅本机回环 127.0.0.1,::1；
-     '*' 表示不限制，仅建议内网使用）。注意反向代理部署时 request.client 是代理地址，需把代理 IP
-     加入白名单或改用直连端口访问。
+  1. IP 白名单：环境变量 LIUG_ADMIN_ALLOWED_IPS（逗号分隔 IP 或 CIDR；**未配置或为空时不做限制**，
+     一旦配置则仅放行名单内来源；'*' 表示不限制，仅建议内网使用）。注意反向代理部署时
+     request.client 是代理地址，需把代理 IP 加入白名单或改用直连端口访问。
   2. 会话 + role=admin：复用 users.py 的 HMAC 会话体系（同 liug_session cookie），与主应用登录态互通；
      管理端使用独立登录端点 /admin/login（登录时即校验管理员角色）。
 - 管理前端为独立 SPA（admin_client/，Vue3 + Vite），构建产物 admin_client/dist 在 /admin/ 路径下托管，
@@ -34,16 +34,21 @@ def _admin_dist_dir() -> Path:
     return Path(d).resolve() if d else (ROOT_DIR / 'admin_client' / 'dist')
 
 
-# ---------- 防线一：IP 白名单 ----------
+# ---------- 防线一：IP 白名单（未配置或为空 = 不限制；配置后仅放行名单内 IP/CIDR，'*' 全放行） ----------
 def _ip_allowed(host: str) -> bool:
-    entries = [s.strip() for s in os.environ.get('LIUG_ADMIN_ALLOWED_IPS', '127.0.0.1,::1').split(',') if s.strip()]
-    if '*' in entries:
+    raw = (os.environ.get('LIUG_ADMIN_ALLOWED_IPS') or '').strip()
+    if not raw:
         return True
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
         return False
-    for entry in entries:
+    for entry in raw.split(','):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry == '*':
+            return True
         try:
             if addr in ipaddress.ip_network(entry, strict=False):
                 return True

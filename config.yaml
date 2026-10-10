@@ -1,0 +1,22 @@
+# 流光 LIUG 服务配置
+#
+# manage.py start / restart 启动后端时读取本文件，把 env 段的键值注入为服务进程的环境变量；
+# 修改后执行  python manage.py restart  即生效。
+#
+# 规则：
+#   - 配置文件优先于 shell 中已 export 的同名变量（配置文件即唯一真相源，避免遗留变量干扰）；
+#   - PORT 由 manage.py 统一管理（默认 4300，--test 为 4301），在 env 段配置会被忽略并警告；
+#   - 注：--test 模式的测试库路径（LIUG_USERS_DB_PATH / LIUG_USERS_DIR / PORT）始终由脚本强制
+#     指定，不受本文件影响，以保证测试库与正式库完全隔离。
+#
+# YAML 语法：冒号后要有空格，注释以 # 开头；含特殊字符的值建议加双引号。
+# 无需安装 PyYAML——manage.py 内置了简易解析（支持 env 段下的 KEY: value 与注释）。
+
+env:
+  # 管理端 /admin 的 IP 白名单（逗号分隔；支持单 IP、CIDR 网段如 192.168.1.0/24、* 全放行）。
+  # 不配置（保持下面这行注释）= 不做限制，任意 IP 可访问 /admin；
+  # 一旦配置则仅放行名单内来源，例如仅本机 + 一个公网 IP：
+  # LIUG_ADMIN_ALLOWED_IPS: "127.0.0.1,::1"
+
+  # 其他服务端环境变量也可按需在此配置（键必须以字母开头，值为字符串），例如：
+  # LIUG_ADMIN_DIST_DIR: "admin_client/dist"
