@@ -7,6 +7,7 @@
     python manage.py stop               # 停止远程后端
     python manage.py restart            # 重启远程后端
     python manage.py status             # 查看端口/进程状态
+    python manage.py pack                # 打包桌面版（版本号取 config.yaml → web/release/liug-v<版本>.exe，并同步官网版本号）
 
     所有命令均可加 --test 使用测试环境（4301 端口 + data/users.test.db + data/users-test/），
     与正式库（4300）完全隔离：
@@ -196,6 +197,60 @@ def cmd_build(_args):
     return 0
 
 
+# ---------------------------------------------------------------- pack（打包发布）
+
+def cmd_pack(_args):
+    """打包桌面版：PyInstaller 打包 liug.exe → web/release/liug-v<版本>.exe，并同步官网版本号。"""
+    version = load_version()
+    if not version:
+        print('[失败] config.yaml 未配置版本号：请在顶层添加  version: "x.y"（如 version: "1.0"）后重试')
+        return 1
+    print(f'[版本] config.yaml version = {version}')
+
+    # exe 内嵌 client/dist 静态资源，必须先构建主应用前端
+    if not npm_build('client', '[1/4] 主应用前端 client（打包内嵌）'):
+        return 1
+
+    if subprocess.run([sys.executable, '-m', 'PyInstaller', '--version'],
+                      capture_output=True).returncode != 0:
+        print('[失败] 未找到 PyInstaller，请先安装：pip install pyinstaller')
+        return 1
+
+    print('[2/4] PyInstaller 打包（liug.spec）...')
+    if subprocess.call([sys.executable, '-m', 'PyInstaller', '--noconfirm', str(ROOT / 'liug.spec')],
+                       cwd=str(ROOT)) != 0:
+        print('[失败] PyInstaller 打包失败')
+        return 1
+    exe_path = ROOT / 'dist' / 'liug.exe'
+    if not exe_path.exists():
+        print(f'[失败] 未找到打包产物：{exe_path.relative_to(ROOT)}')
+        return 1
+
+    release_dir = ROOT / 'web' / 'release'
+    release_dir.mkdir(parents=True, exist_ok=True)
+    release_path = release_dir / f'liug-v{version}.exe'
+    shutil.copy2(exe_path, release_path)
+    size_mb = release_path.stat().st_size / 1024 / 1024
+    print(f'[3/4] 发布产物：{release_path.relative_to(ROOT)}（{size_mb:.1f} MB）')
+
+    # 同步官网版本号：v x.y 形式的版本号全量替换（lambda 替换，避免版本串中的反斜杠被当作组引用）
+    index_path = ROOT / 'web' / 'index.html'
+    try:
+        html = index_path.read_text(encoding='utf-8')
+    except OSError:
+        print(f'[跳过] 未找到官网页面：{index_path.relative_to(ROOT)}')
+        html = ''
+    new_html, count = re.subn(r'v\d+(?:\.\d+)+', lambda m: f'v{version}', html)
+    if count:
+        index_path.write_text(new_html, encoding='utf-8')
+        print(f'[4/4] 官网版本号已同步：替换 {count} 处 → v{version}')
+    else:
+        print(f'[4/4] 官网版本号无需同步（目标 v{version}）')
+
+    print('打包发布完成。')
+    return 0
+
+
 # ---------------------------------------------------------------- 配置文件
 
 CONFIG_FILE = ROOT / 'config.yaml'
@@ -246,6 +301,47 @@ def load_env_config(path=CONFIG_FILE):
         return {}
     # YAML 可能解析出 int/bool 等标量，统一转字符串
     return {str(k): str(v) for k, v in env_map.items() if k and v is not None}
+
+
+def load_version(path=None):
+    """读取 config.yaml 顶层 version 键 → 版本号字符串；文件不存在/未配置/值为空返回 None。"""
+    if path is None:
+        # 默认值在调用时才取 CONFIG_FILE（而非定义时绑定），便于运行中替换配置路径
+        path = CONFIG_FILE
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return None
+    try:
+        import yaml  # type: ignore
+        data = yaml.safe_load(text) or {}
+        if not isinstance(data, dict):
+            return None
+        value = data.get('version')
+    except ImportError:
+        # 无 PyYAML 的简易解析：仅识别顶层 version: value（# 注释、可选引号）
+        value = None
+        for raw in text.splitlines():
+            stripped = raw.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if raw[0].isspace():          # 跳过子级缩进行（version 必须是顶层键）
+                continue
+            if not stripped.startswith('version:'):
+                continue
+            value = stripped.partition(':')[2].strip()
+            # 去掉行内注释（# 前有空白才算，避免误伤值中的 #）
+            for i, ch in enumerate(value):
+                if ch == '#' and i > 0 and value[i - 1].isspace():
+                    value = value[:i].rstrip()
+                    break
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            break
+    if value is None:
+        return None
+    # YAML 可能解析出 int/float 等标量，统一转字符串
+    return str(value).strip() or None
 
 
 # ---------------------------------------------------------------- start / stop
@@ -405,7 +501,7 @@ def main():
     except Exception:
         pass
     parser = argparse.ArgumentParser(
-        description='流光 LIUG 一键管理脚本（build/start/stop/restart/status）')
+        description='流光 LIUG 一键管理脚本（build/start/stop/restart/status/pack）')
     sub = parser.add_subparsers(dest='command', required=True)
 
     for name, fn, help_ in [
@@ -419,6 +515,10 @@ def main():
         p.add_argument('--test', action='store_true',
                        help='使用测试环境（4301 + data/users.test.db + data/users-test/）')
         p.set_defaults(fn=fn)
+
+    # pack 打包的是桌面版 exe，与正式/测试环境无关，单独注册（不带 --test 参数）
+    p = sub.add_parser('pack', help='打包桌面版发布产物到 web/release/（版本号取 config.yaml 的 version）')
+    p.set_defaults(fn=cmd_pack)
 
     args = parser.parse_args()
     sys.exit(args.fn(args))

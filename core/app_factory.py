@@ -23,6 +23,12 @@ def _dist_dir() -> Path:
     return Path(d).resolve() if d else (ROOT_DIR / 'client' / 'dist')
 
 
+def _web_dir() -> Path:
+    """官网静态站目录（/liug 路径托管），可用 LIUG_WEB_DIR 覆盖"""
+    d = os.environ.get('LIUG_WEB_DIR')
+    return Path(d).resolve() if d else (ROOT_DIR / 'web')
+
+
 def create_app(get_user_id_dep, auth_router, extra_routers=()):
     """组装完整 FastAPI 应用
 
@@ -54,6 +60,22 @@ def create_app(get_user_id_dep, auth_router, extra_routers=()):
         """对齐 Express：express.static(dist) + 非 /api/* 一律回退 index.html"""
         if full_path.startswith('api/'):
             raise ApiError(404, 'Not Found')
+        # 官网静态站：/liug 与 /liug/* 由 web/ 目录托管；
+        # 目录不存在时（如桌面 exe 未打包 web/）保持原 SPA 行为
+        if full_path == 'liug' or full_path.startswith('liug/'):
+            web = _web_dir()
+            if web.is_dir():
+                rel = full_path[len('liug'):].lstrip('/') or 'index.html'
+                candidate = (web / rel).resolve()
+                try:
+                    candidate.relative_to(web.resolve())
+                except ValueError:
+                    raise ApiError(404, 'Not Found')  # 防目录穿越
+                if not candidate.is_file():
+                    raise ApiError(404, 'Not Found')
+                # index.html 每次回源校验（口径同主应用 SPA，防 WebView2 旧缓存）
+                headers = {'Cache-Control': 'no-cache'} if rel == 'index.html' else None
+                return FileResponse(candidate, headers=headers)
         if full_path:
             dist = _dist_dir()
             candidate = (dist / full_path).resolve()

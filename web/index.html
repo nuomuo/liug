@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>流光 LIUG — 自托管日程管理应用</title>
+<meta name="description" content="流光 LIUG：自托管的日程管理应用。月/周日历、任务清单、四象限、倒数日一站式管理，液态玻璃质感 UI；Windows 桌面版打包为单个 liug.exe，托盘常驻 + 桌面小组件。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2317d495'/%3E%3Cstop offset='1' stop-color='%230aa36b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M20 33.5 L28.5 42 L44.5 24' stroke='white' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+/* ============================================================
+   流光 LIUG 官网 · 液态玻璃设计系统
+   与 client/src/styles/global.css 同源：材质分层 / 玻璃高光描边 / Apple 缓动
+   ============================================================ */
+:root {
+  --primary: #0fbf7f;
+  --primary-deep: #0a9e68;
+  --front-color: #1d1d1f;
+  --front-color-rgb: 29, 29, 31;
+
+  --grey-40: rgba(29, 29, 31, 0.4);
+  --grey-50: rgba(29, 29, 31, 0.5);
+  --grey-60: rgba(29, 29, 31, 0.6);
+  --grey-80: rgba(29, 29, 31, 0.8);
+
+  /* 液态玻璃材质（与主应用一致） */
+  --glass-panel-bg: rgba(255, 255, 255, 0.58);
+  --glass-panel-blur: blur(28px) saturate(180%);
+  --glass-heavy-bg: rgba(255, 255, 255, 0.78);
+  --glass-heavy-blur: blur(36px) saturate(190%);
+  --glass-dark-bg: rgba(24, 30, 27, 0.62);
+  --glass-dark-blur: blur(28px) saturate(160%);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-border-soft: rgba(255, 255, 255, 0.35);
+  --glass-shadow:
+    0 1px 1px rgba(20, 20, 30, 0.04),
+    0 8px 24px rgba(20, 20, 40, 0.10),
+    0 24px 64px rgba(20, 20, 40, 0.12);
+  --glass-shadow-float:
+    0 2px 2px rgba(20, 20, 30, 0.05),
+    0 12px 32px rgba(20, 20, 40, 0.14),
+    0 32px 80px rgba(20, 20, 40, 0.16);
+
+  --radius-panel: 20px;
+  --radius-float: 16px;
+  --radius-control: 10px;
+
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-family);
+  color: var(--front-color);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: linear-gradient(180deg, #ecf3ee 0%, #e0eae3 42%, #d8e6de 100%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+a { text-decoration: none; color: inherit; }
+img { display: block; max-width: 100%; }
+::selection { background: rgba(15, 191, 127, 0.25); }
+
+/* ============ 背景：弥散光斑（液态氛围） ============ */
+.bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.bg i {
+  position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5;
+  animation: drift 22s var(--ease-spring) infinite alternate;
+}
+.bg .o1 { width: 560px; height: 560px; left: -8%; top: -14%; background: #8fe6c0; }
+.bg .o2 { width: 480px; height: 480px; right: -10%; top: 12%; background: #a9c9f5; animation-delay: -7s; }
+.bg .o3 { width: 460px; height: 460px; left: 24%; bottom: -22%; background: #ffe9b8; animation-delay: -14s; }
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(48px, -36px, 0) scale(1.12); }
+}
+
+/* ============ 玻璃工具类（与主应用同名同参数） ============ */
+.glass-panel {
+  background: var(--glass-panel-bg);
+  -webkit-backdrop-filter: var(--glass-panel-blur);
+  backdrop-filter: var(--glass-panel-blur);
+  border: 1px solid var(--glass-border-soft);
+  box-shadow: var(--glass-shadow);
+}
+.glass-heavy {
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-float);
+}
+.glass-dark {
+  background: var(--glass-dark-bg);
+  -webkit-backdrop-filter: var(--glass-dark-blur);
+  backdrop-filter: var(--glass-dark-blur);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--glass-shadow-float);
+}
+
+.wrap { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
+
+/* ============ 顶部导航 ============ */
+.nav {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 100;
+  width: min(1080px, calc(100% - 24px));
+  display: flex; align-items: center; gap: 28px;
+  height: 58px; padding: 0 10px 0 20px;
+  border-radius: var(--radius-float);
+}
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: 0.02em; }
+.logo svg { width: 26px; height: 26px; border-radius: 7px; box-shadow: 0 2px 8px rgba(15, 191, 127, 0.35); }
+.nav-links { display: flex; gap: 4px; margin-right: auto; }
+.nav-links a {
+  padding: 7px 14px; border-radius: 999px;
+  font-size: 14px; color: var(--grey-60); font-weight: 500;
+  transition: all 0.35s var(--ease-spring);
+}
+.nav-links a:hover { color: var(--front-color); background: rgba(29, 29, 31, 0.05); }
+.nav-cta { margin-left: auto; }
+.nav .btn { padding: 9px 18px; font-size: 13.5px; border-radius: 999px; }
+.ver-chip {
+  font-size: 12px; font-weight: 600; color: var(--primary-deep);
+  background: rgba(15, 191, 127, 0.12); border: 1px solid rgba(15, 191, 127, 0.22);
+  padding: 4px 10px; border-radius: 999px;
+}
+
+/* ============ 按钮 ============ */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 12px; font-weight: 600; cursor: pointer;
+  transition: transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease-spring), background 0.35s var(--ease-spring);
+  will-change: transform;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  background: linear-gradient(135deg, #14d18d, var(--primary-deep));
+  color: #fff;
+  padding: 14px 28px; font-size: 15.5px;
+  box-shadow: 0 8px 24px rgba(15, 191, 127, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(15, 191, 127, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.btn-glass {
+  background: var(--glass-heavy-bg);
+  -webkit-backdrop-filter: var(--glass-heavy-blur);
+  backdrop-filter: var(--glass-heavy-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--front-color);
+  padding: 14px 26px; font-size: 15.5px;
+}
+.btn-glass:hover { transform: translateY(-2px); }
+.btn svg { width: 17px; height: 17px; }
+.btn-ghost {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 13px 26px; font-size: 15px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.14); transform: translateY(-2px); }
+
+/* ============ Hero ============ */
+.hero { padding: 168px 0 56px; text-align: center; }
+.badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 999px;
+  font-size: 13px; font-weight: 500; color: var(--grey-80);
+}
+.badge .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--primary);
+  box-shadow: 0 0 0 0 rgba(15, 191, 127, 0.5); animation: pulse 2.4s infinite;
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(15, 191, 127, 0.45); }
+  70% { box-shadow: 0 0 0 9px rgba(15, 191, 127, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(15, 191, 127, 0); }
+}
+.hero h1 {
+  margin: 26px 0 18px;
+  font-size: clamp(46px, 7.5vw, 84px);
+  font-weight: 800; letter-spacing: 0.01em; line-height: 1.12;
+  background: linear-gradient(115deg, #17281f 10%, #0c6b47 55%, var(--primary) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.hero .sub {
+  max-width: 660px; margin: 0 auto;
+  font-size: 17px; color: var(--grey-60); line-height: 2;
+}
+.hero .sub b { color: var(--front-color); font-weight: 600; }
+.hero-cta { margin-top: 38px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.hero-note { margin-top: 14px; font-size: 13px; color: var(--grey-50); }
+.hero-chips { margin-top: 30px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.chip {
+  padding: 7px 16px; border-radius: 999px;
+  font-size: 13px; color: var(--grey-80); font-weight: 500;
+}
+
+/* ============ 截图展示 ============ */
+.shot {
+  border-radius: 24px; padding: 14px;
+  margin: 26px auto 0;
+}
+.shot img { border-radius: 14px; width: 100%; }
+.shot figcaption {
+  text-align: center; padding: 14px 0 4px;
+  font-size: 13px; color: var(--grey-50);
+}
+
+/* ============ 通用 Section ============ */
+section.block { padding: 92px 0 0; }
+.sec-head { text-align: center; margin-bottom: 44px; }
+.eyebrow {
+  display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.22em;
+  color: var(--primary-deep); margin-bottom: 12px;
+}
+.sec-head h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: 0.01em; }
+.sec-head p { margin-top: 12px; color: var(--grey-60); font-size: 15.5px; }
+
+/* ============ 功能卡片 ============ */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.card {
+  border-radius: var(--radius-panel); padding: 28px 26px;
+  transition: transform 0.45s var(--ease-spring), box-shadow 0.45s var(--ease-spring);
+}
+.card:hover { transform: translateY(-5px); box-shadow: var(--glass-shadow-float); }
+.card .ic {
+  width: 46px; height: 46px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--primary-deep);
+  background: rgba(15, 191, 127, 0.12);
+  border: 1px solid rgba(15, 191, 127, 0.2);
+  margin-bottom: 18px;
+}
+.card .ic svg { width: 22px; height: 22px; }
+.card h3 { font-size: 16.5px; font-weight: 700; margin-bottom: 8px; }
+.card p { font-size: 14px; color: var(--grey-60); line-height: 1.85; }
+.card .tag {
+  display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 600;
+  color: var(--primary-deep); background: rgba(15, 191, 127, 0.1);
+  padding: 3px 10px; border-radius: 999px;
+}
+
+/* ============ 桌面版（深色玻璃） ============ */
+.desktop {
+  border-radius: 24px; padding: clamp(32px, 5vw, 56px);
+  display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(28px, 4vw, 56px);
+  align-items: center; color: #fff;
+}
+.desktop .eyebrow { color: #5fe3ae; }
+.desktop h2 { font-size: clamp(26px, 3.6vw, 36px); font-weight: 800; }
+.desktop .desc { margin-top: 14px; color: rgba(255, 255, 255, 0.72); font-size: 15px; line-height: 1.9; }
+.feat-list { margin: 26px 0 32px; display: grid; gap: 14px; }
+.feat-list li { display: flex; gap: 12px; align-items: flex-start; font-size: 14.5px; color: rgba(255, 255, 255, 0.88); line-height: 1.75; }
+.feat-list .ck {
+  flex: none; width: 20px; height: 20px; margin-top: 3px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(15, 191, 127, 0.25); border: 1px solid rgba(95, 227, 174, 0.4);
+}
+.feat-list .ck svg { width: 11px; height: 11px; color: #5fe3ae; }
+.feat-list b { color: #fff; font-weight: 600; }
+.dl-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.dl-meta { font-size: 12.5px; color: rgba(255, 255, 255, 0.55); margin-top: 14px; }
+.dl-shot {
+  border-radius: var(--radius-float); padding: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.dl-shot img { border-radius: 10px; }
+
+/* ============ 技术栈 ============ */
+.tech-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.tech-row span {
+  padding: 10px 20px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; color: var(--grey-80);
+}
+
+/* ============ Footer ============ */
+footer { margin-top: 100px; padding: 0 0 56px; text-align: center; }
+footer .line { height: 1px; background: linear-gradient(90deg, transparent, rgba(29,29,31,0.12), transparent); margin-bottom: 36px; }
+footer p { font-size: 13px; color: var(--grey-50); }
+footer p + p { margin-top: 8px; }
+footer b { color: var(--grey-80); font-weight: 600; }
+
+/* ============ 入场动画 ============ */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.8s var(--ease-spring), transform 0.8s var(--ease-spring); }
+.reveal.in { opacity: 1; transform: none; }
+.grid .card:nth-child(2) { transition-delay: 0.06s; }
+.grid .card:nth-child(3) { transition-delay: 0.12s; }
+.grid .card:nth-child(4) { transition-delay: 0.18s; }
+.grid .card:nth-child(5) { transition-delay: 0.24s; }
+.grid .card:nth-child(6) { transition-delay: 0.30s; }
+
+/* ============ 响应式 ============ */
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+  .desktop { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .nav-links, .nav .ver-chip { display: none; }
+  .hero { padding-top: 132px; }
+  .hero .sub { font-size: 15.5px; }
+  .grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .bg i, .badge .dot { animation: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true"><i class="o1"></i><i class="o2"></i><i class="o3"></i></div>
+
+<!-- ============ 导航 ============ -->
+<header class="nav glass-heavy">
+  <a class="logo" href="#top" aria-label="流光 LIUG 首页">
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#17d495"/><stop offset="1" stop-color="#0a9e68"/>
+      </linearGradient></defs>
+      <rect width="64" height="64" rx="16" fill="url(#lg)"/>
+      <path d="M20 33.5 L28.5 42 L44.5 24" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    流光 LIUG
+  </a>
+  <nav class="nav-links" aria-label="页面导航">
+    <a href="#features">功能特性</a>
+    <a href="#desktop">桌面版</a>
+    <a href="#tech">技术栈</a>
+  </nav>
+  <span class="ver-chip">v1.0</span>
+  <a class="btn btn-primary nav-cta" href="release/liug-v1.0.exe" download="流光LIUG-v1.0.exe">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>
+    下载
+  </a>
+</header>
+
+<main id="top">
+
+  <!-- ============ Hero ============ -->
+  <section class="hero wrap">
+    <span class="badge glass-panel"><span class="dot"></span>自托管 · 开箱即用 · 全程 Vibe Coding</span>
+    <h1>流光 LIUG</h1>
+    <p class="sub">
+      自托管的日程管理应用：以<b>月 / 周日历</b>为核心，<b>任务清单、四象限、倒数日</b>一站式管理。
+      液态玻璃质感 UI，一个命令启动服务，浏览器打开即用；Windows 桌面版打包为单个 <b>liug.exe</b>，托盘常驻 + 桌面小组件。
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="release/liug-v1.0.exe" download="流光LIUG-v1.0.exe">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>
+        下载 Windows 版 liug.exe
+      </a>
+      <a class="btn btn-glass" href="#features">
+        了解功能
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg>
+      </a>
+    </div>
+    <p class="hero-note">v1.0 · 单文件免安装 · 双击即用</p>
+    <div class="hero-chips">
+      <span class="chip glass-panel">离线可用 + 云端同步</span>
+      <span class="chip glass-panel">多用户 · 数据独立隔离</span>
+      <span class="chip glass-panel">Vue 3 + FastAPI + SQLite</span>
+    </div>
+  </section>
+
+  <!-- ============ 主界面截图 ============ -->
+  <figure class="shot glass-panel wrap reveal">
+    <img src="assets/app-calendar.png" alt="流光 LIUG 日历主界面：月视图网格、迷你月历与任务色块" loading="lazy">
+    <figcaption>日历月视图 —— 清单色块、农历 / 节气 / 法定节假日、拖拽改期</figcaption>
+  </figure>
+
+  <!-- ============ 功能特性 ============ -->
+  <section id="features" class="block wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">FEATURES</span>
+      <h2>功能特性</h2>
+      <p>浏览器与桌面双形态，功能设计参考滴答清单</p>
+    </div>
+    <div class="grid">
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18"/><path d="m9 14.5 2 2 4-4"/></svg></div>
+        <h3>日历 <span class="tag">核心</span></h3>
+        <p>月 / 周双视图，迷你月历带农历、节气与法定节假日图标；任务色块拖拽改期、双击空白格快速添加、格子容量自适应浮层；周视图 24 小时时间网格，当前时间红线。</p>
+      </article>
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h1.5M4 12h1.5M4 17.5h1.5"/><path d="M9.5 6.5H20M9.5 12H20M9.5 17.5H20"/></svg></div>
+        <h3>任务清单</h3>
+        <p>清单 / 标签双维筛选，过期任务红字提醒；任务详情支持日期时间、重复规则、优先级、Markdown 备注与子任务；还能一键导入外部清单应用的 CSV 备份。</p>
+      </article>
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7.2" height="7.2" rx="2"/><rect x="13.3" y="3.5" width="7.2" height="7.2" rx="2"/><rect x="3.5" y="13.3" width="7.2" height="7.2" rx="2"/><rect x="13.3" y="13.3" width="7.2" height="7.2" rx="2"/></svg></div>
+        <h3>四象限</h3>
+        <p>艾森豪威尔矩阵（重要 × 紧急）梳理优先级，任务可跨象限拖拽，自动改写优先级与截止日期；桌面版还能把它常驻为桌面小组件。</p>
+      </article>
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 2"/><path d="M9.5 2.5h5"/></svg></div>
+        <h3>倒数日</h3>
+        <p>纪念日、倒数日、生日与节日卡片墙，支持农历与每年重复，预置 8 个传统节日，重要日子一眼可见。</p>
+      </article>
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.6-4.6"/></svg></div>
+        <h3>全局搜索</h3>
+        <p><b>Ctrl + K</b> 唤起全局搜索，标题、备注、标签一网打尽，任务再多也能秒速定位。</p>
+      </article>
+      <article class="card glass-panel reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M3.5 12h17"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+        <h3>主题与账户</h3>
+        <p>8 款预设主题色 + 自定义取色器，即时生效并持久化；多用户登录（scrypt 密码哈希 + HMAC 签名会话），每人数据独立库隔离。</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ 桌面版下载 ============ -->
+  <section id="desktop" class="block wrap">
+    <div class="desktop glass-dark reveal">
+      <div>
+        <span class="eyebrow">WINDOWS DESKTOP</span>
+        <h2>Windows 桌面版 · liug.exe</h2>
+        <p class="desc">单进程集成系统托盘、主界面窗口（WebView2）、桌面小组件与内嵌服务，PyInstaller 打包为单文件 exe，双击即用。</p>
+        <ul class="feat-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span><span><b>托盘常驻</b>：主窗口点 × 隐藏到托盘，单实例互斥锁防双开</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span><span><b>桌面四象限小组件</b>：无边框透明窗口，玻璃三档配色、置顶与位置记忆</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span><span><b>离线可用 + 云端同步</b>：断网照常用，联网自动双向合并，也支持单机免登录模式</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span><span><b>干净省心</b>：粘性动态端口不抢占，数据收在家目录 <b>~/.liug</b></span></li>
+        </ul>
+        <div class="dl-row">
+          <a class="btn btn-primary" href="release/liug-v1.0.exe" download="流光LIUG-v1.0.exe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>
+            下载 liug.exe（v1.0）
+          </a>
+          <a class="btn btn-ghost" href="#top">返回顶部</a>
+        </div>
+        <p class="dl-meta">v1.0 · Windows 10 / 11（WebView2 运行时）· 单文件 · 免安装</p>
+      </div>
+      <figure class="dl-shot">
+        <img src="assets/desktop-widget.png" alt="桌面四象限小组件：深色玻璃质感，常驻 Windows 桌面" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============ 技术栈 ============ -->
+  <section id="tech" class="block wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">TECH STACK</span>
+      <h2>技术栈</h2>
+      <p>前后端分离，业务核心双端共享</p>
+    </div>
+    <div class="tech-row reveal">
+      <span class="glass-panel">Vue 3.5 · Vite 6</span>
+      <span class="glass-panel">FastAPI · uvicorn</span>
+      <span class="glass-panel">SQLite（WAL）</span>
+      <span class="glass-panel">pywebview · WebView2</span>
+      <span class="glass-panel">pystray 系统托盘</span>
+      <span class="glass-panel">PyInstaller 打包</span>
+      <span class="glass-panel">lunar-javascript 农历</span>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ Footer ============ -->
+<footer class="wrap">
+  <div class="line"></div>
+  <p><b>流光 LIUG</b> · 自托管的日程管理应用</p>
+  <p>全程 Vibe Coding —— 感谢 TRAE · GLM · DeepSeek · 设计参考滴答清单</p>
+  <p>© 2026 流光 LIUG</p>
+</footer>
+
+<script>
+// 入场动画：滚动到可视区域时渐显（Apple 缓动）
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+
+</body>
+</html>

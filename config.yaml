@@ -12,6 +12,11 @@
 # YAML 语法：冒号后要有空格，注释以 # 开头；含特殊字符的值建议加双引号。
 # 无需安装 PyYAML——manage.py 内置了简易解析（支持 env 段下的 KEY: value 与注释）。
 
+# 当前版本号（唯一真相源）：
+#   - manage.py pack 打包时读取：发布产物为 web/release/liug-v<版本>.exe；
+#   - 官网 web/index.html 显示的版本号与下载链接在 pack 时自动同步为此值。
+version: "1.0"
+
 env:
   # 管理端 /admin 的 IP 白名单（逗号分隔；支持单 IP、CIDR 网段如 192.168.1.0/24、* 全放行）。
   # 不配置（保持下面这行注释）= 不做限制，任意 IP 可访问 /admin；

@@ -38,3 +38,5 @@ example/
 skills/
 server-node-backup/*
 system-admin-flask-backup/*
+.trae/
+*.exe
