@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from core import routes as core_routes
 from core.errors import ApiError
@@ -65,6 +65,10 @@ def create_app(get_user_id_dep, auth_router, extra_routers=()):
         if full_path == 'liug' or full_path.startswith('liug/'):
             web = _web_dir()
             if web.is_dir():
+                # 裸 /liug 补结尾斜杠：否则页内相对路径（assets/、release/）以站点根为基准解析，
+                # 图片与下载链接会指到 /liug 之外的路径而失效（被 SPA fallback 兜成 HTML）
+                if full_path == 'liug':
+                    return RedirectResponse(url='/liug/', status_code=308)
                 rel = full_path[len('liug'):].lstrip('/') or 'index.html'
                 candidate = (web / rel).resolve()
                 try:
