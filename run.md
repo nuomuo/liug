@@ -16,7 +16,24 @@ npm install --prefix client
 npm install --prefix admin_client
 ```
 
-## 二、启动后端（必须）
+## 二、一键管理脚本（推荐）
+
+日常编译、启动、停止全部通过根目录的 `manage.py` 完成（Windows PowerShell / CMD 均可）：
+
+```powershell
+python manage.py build      # 编译前后端所有模块（Python 语法检查 + client + admin_client）
+python manage.py start      # 启动后端（4300 正式库，后台常驻，不占终端）
+python manage.py stop       # 停止后端（只杀 python 进程，不误杀桌面端 liug.exe）
+python manage.py restart    # 重启后端（改了后端代码后生效用）
+python manage.py status     # 查看端口与进程状态
+```
+
+- 首次部署顺序：`pip install -r server/requirements.txt` → `python manage.py build` → `python manage.py start`
+- `build` 对两个前端在缺 `node_modules` 时自动执行 `npm install`，无需单独装依赖
+- 运行日志写入 `data/server.log`（启动失败时脚本会自动打印日志末尾便于排查）
+- 所有命令均可加 `--test` 切换到测试环境（见「七、测试环境」）
+
+## 三、启动后端（手动方式，必须了解）
 
 后端同时提供 API 并托管前端构建产物，**日常使用只需启动它**：
 
@@ -29,7 +46,7 @@ npm run server --prefix client
 
 - 主应用：[http://localhost:4300](http://localhost:4300)
 
-## 三、启动前端
+## 四、启动前端
 
 ### 日常使用（无需启动）
 
@@ -76,7 +93,7 @@ npm run dev --prefix admin_client
 - 开发服务器 [http://localhost:5181](http://localhost:5181)（`/admin` 自动代理到 4300，**需先启动后端**）
 - 静态资源目录可用 `LIUG_ADMIN_DIST_DIR` 覆盖（默认 `admin_client/dist`）；未构建时访问 /admin/ 返回 404 提示
 
-## 四、桌面四象限小组件（可选）
+## 五、桌面四象限小组件（可选）
 
 pywebview 无边框透明置顶窗口，加载主应用的 `/quadrant` 页面（需先执行过 `npm run build --prefix client`）：
 
@@ -90,7 +107,7 @@ python desktop/desktop_widget.py
 - 依赖见 `desktop/requirements.txt`（pywebview / pystray / pillow 等）
 - 浏览器调试地址：主服务启动后访问 [http://localhost:4300/quadrant](http://localhost:4300/quadrant)
 
-## 五、桌面版整应用（liug.exe）
+## 六、桌面版整应用（liug.exe）
 
 `desktop/main.py`：一个进程搞定全部——系统托盘常驻（pystray）+ 主界面窗口 + 可选桌面小组件 + 内嵌 uvicorn 服务。
 桌面客户端支持**单机模式（免登录）**与**远程账号（云端同步）**两种使用方式（不含用户管理逻辑，账户体系仅在 `server/` 远程后端）：
@@ -125,10 +142,14 @@ python -m PyInstaller --noconfirm liug.spec
   - 数据同步：任务增删改（`store.js` 各写操作）+ 登录/登出均打点 `liug-sync`，主界面与小组件互听 `storage` 事件**实时**双向同步（弹窗打开时主界面暂缓自动刷新，防打断编辑）
   - 透明窗口下 `backdrop-filter` 会把背景拍成不透明，`body.widget-mode` 全局禁用毛玻璃并以更实的底色替代（`global.css`）
 
-## 六、测试环境（隔离测试库，不得写正式数据）
+## 七、测试环境（隔离测试库，不得写正式数据）
 
 ```powershell
-# 主应用测试服务器（4301，首次启动自动创建测试管理员 admin / admin123）
+# 方式一：一键脚本（推荐，自动设置隔离环境变量并后台启动）
+python manage.py start --test
+python manage.py stop --test
+
+# 方式二：手动启动（4301，首次启动自动创建测试管理员 admin / admin123）
 $env:LIUG_USERS_DB_PATH='data/users.test.db'; $env:LIUG_USERS_DIR='data/users-test'; $env:PORT='4301'; python server/app.py
 # 访问 http://localhost:4301（管理端测试：http://localhost:4301/admin/）
 
@@ -138,7 +159,7 @@ $env:LIUG_DB_PATH='data/schedule.test.db'; python core/import_csv.py <csv路径>
 
 用完记得清掉环境变量（`Remove-Item Env:LIUG_USERS_DB_PATH` 等）或直接关闭该终端，避免下次误连测试库。
 
-## 七、常见问题
+## 八、常见问题
 
-- **端口被占用**：4300 被占时先 `netstat -ano | findstr 4300` 找到 PID，确认是旧服务后 `taskkill /PID <pid> /F`。
+- **端口被占用**：`python manage.py status` 查看占用情况；确认是旧服务后 `python manage.py stop`（或手动 `taskkill /PID <pid> /F`）。
 - **旧登录态**：会话密钥沿用旧版，升级后浏览器免登录直接可用；若被登出，重新登录一次即可。
