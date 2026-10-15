@@ -21,6 +21,7 @@ export const store = reactive({
   view: 'calendar', // calendar | list | matrix | focus | habit | countdown
   calendarViewMode: 'month', // month | week
   currentDate: new Date(),
+  todayStr: fmtDate(new Date()), // 响应式「今天」，跨天自动前进（见下方校对定时器），勿在组件里固定快照
   calendarSettings: {
     showCompleted: true,
   },
@@ -44,6 +45,16 @@ export function showToast(msg, ms = 2200) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => (store.toast = ''), ms);
 }
+
+// 「今天」跨天校对：桌面端常驻托盘多日不重载页面，currentDate / todayStr 会停在启动日。
+// 每 30s 校对一次自然日；跨天时若 currentDate 仍停留在旧「今天」（用户未翻页/跳月），一并前进到新的一天。
+setInterval(() => {
+  const fresh = fmtDate(new Date());
+  if (fresh === store.todayStr) return;
+  const wasToday = fmtDate(store.currentDate) === store.todayStr;
+  store.todayStr = fresh;
+  if (wasToday) store.currentDate = new Date();
+}, 30000);
 
 // ---------- 认证 ----------
 /** 清空本地数据（登出/会话失效时） */

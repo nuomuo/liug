@@ -1,9 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { store, updateTaskLocal, getProject, openTaskDetail, toggleTask, fmtDate, parseLocal } from '../store.js';
+import { store, updateTaskLocal, getProject, openTaskDetail, toggleTask, parseLocal } from '../store.js';
 import Icon from './Icon.vue';
 
-const todayStr = fmtDate(new Date());
+const todayStr = computed(() => store.todayStr); // 响应式：跨天自动前进（勿用启动时快照）
 
 // 四象限与全局四级优先级一一对应：q1→高(5)、q2→中(3)、q3→低(1)、q4→无(0)
 const QUADRANTS = [
@@ -24,8 +24,8 @@ function quadrantOf(t) {
 function sectionOf(t) {
   if (!t.dueDate) return '无日期';
   const d = t.dueDate.slice(0, 10);
-  if (d <= todayStr) return '今天';
-  const diff = (new Date(d + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000;
+  if (d <= todayStr.value) return '今天';
+  const diff = (new Date(d + 'T00:00:00') - new Date(todayStr.value + 'T00:00:00')) / 86400000;
   if (diff <= 7) return '最近7天';
   return '更远';
 }
@@ -55,8 +55,8 @@ function priColor(p) {
 function dueLabel(t) {
   if (!t.dueDate) return '';
   const d = t.dueDate.slice(0, 10);
-  if (d === todayStr) return '今天';
-  const diff = (new Date(d + 'T00:00:00') - new Date(todayStr + 'T00:00:00')) / 86400000;
+  if (d === todayStr.value) return '今天';
+  const diff = (new Date(d + 'T00:00:00') - new Date(todayStr.value + 'T00:00:00')) / 86400000;
   if (diff === 1) return '明天';
   const dt = parseLocal(t.dueDate);
   if (!t.isAllDay) {
@@ -67,7 +67,7 @@ function dueLabel(t) {
 }
 function isOverdue(t) {
   if (!t.dueDate) return false;
-  return t.dueDate.slice(0, 10) < todayStr;
+  return t.dueDate.slice(0, 10) < todayStr.value;
 }
 
 // ---------- 拖拽到象限 ----------

@@ -15,7 +15,7 @@ import TaskChip from './TaskChip.vue';
 
 const emit = defineEmits(['open-task']);
 
-const todayStr = fmtDate(new Date());
+const todayStr = computed(() => store.todayStr); // 响应式：跨天自动前进（勿用启动时快照）
 const days = computed(() => weekDates(store.currentDate));
 const hours = Array.from({ length: 24 }, (_, i) => i);
 

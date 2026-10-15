@@ -6,7 +6,7 @@ import Icon from './Icon.vue';
 
 const emit = defineEmits(['select']);
 
-const todayStr = fmtDate(new Date());
+const todayStr = computed(() => store.todayStr); // 响应式：跨天自动前进（勿用启动时快照）
 
 // 迷你日历独立游标（原版：跟随主视图，点击标题切换年月）
 const viewDate = ref(new Date(store.currentDate));
